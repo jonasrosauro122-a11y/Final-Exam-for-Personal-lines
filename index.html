@@ -1,888 +1,1409 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
-import { createClient } from "@supabase/supabase-js";
-import jsPDF from "jspdf";
-
-/*
-  SUPABASE SETUP
-  1) In Netlify, add environment variables:
-     VITE_SUPABASE_URL=your-project-url
-     VITE_SUPABASE_ANON_KEY=your-anon-key
-
-  2) Example table:
-
-  create table if not exists exam_results (
-    id bigint generated always as identity primary key,
-    created_at timestamptz default now(),
-    candidate_name text,
-    agency text,
-    score integer,
-    passed boolean,
-    objective_correct integer,
-    drag_correct integer,
-    total_items integer,
-    time_used_seconds integer,
-    certificate_number text,
-    answers jsonb,
-    drag_placements jsonb
-  );
-*/
-
-const PASSING_SCORE = 90;
-const EXAM_TIME_MINUTES = 60;
-
-const SUPABASE_URL = (typeof import.meta !== "undefined" && import.meta.env?.VITE_SUPABASE_URL) || "";
-const SUPABASE_ANON_KEY = (typeof import.meta !== "undefined" && import.meta.env?.VITE_SUPABASE_ANON_KEY) || "";
-const supabase = SUPABASE_URL && SUPABASE_ANON_KEY ? createClient(SUPABASE_URL, SUPABASE_ANON_KEY) : null;
-
-const OBJECTIVE_QUESTIONS = [
-  { id: 1, question: "What is the main purpose of insurance?", answer: "To transfer risk from an individual to an insurance company", type: "mcq" },
-  { id: 2, question: "What responsibility does an insurance underwriter have?", answer: "To assess risks and determine policy terms", type: "mcq" },
-  { id: 3, question: "In a policy, what is the deductible?", answer: "The amount the insured pays out of pocket before the insurer pays", type: "mcq" },
-  { id: 4, question: "Which type of insurance provides coverage for vehicles?", answer: "Auto Insurance", type: "mcq" },
-  { id: 5, question: "What is a premium in insurance?", answer: "The cost of the insurance policy", type: "mcq" },
-  { id: 6, question: "What is the purpose of a Certificate of Insurance (COI)?", answer: "To summarize business insurance coverages and effective dates", type: "mcq" },
-  { id: 7, question: "Which of the following is NOT typically covered by a standard homeowners policy?", answer: "Flood damage", type: "mcq" },
-  { id: 8, question: "What is an insurance policy limit?", answer: "The maximum amount the insurer will pay for a covered loss", type: "mcq" },
-  { id: 9, question: "What is a claim?", answer: "A request for coverage due to a loss", type: "mcq" },
-  { id: 10, question: "What does underinsured mean?", answer: "Insufficient insurance coverage", type: "mcq" },
-  { id: 11, question: "What is the purpose of an endorsement?", answer: "To add or change coverages", type: "mcq" },
-  { id: 12, question: "What does ACV stand for?", answer: "Actual Cash Value", type: "mcq" },
-  { id: 13, question: "What are the three main sections of an Auto policy?", answer: "Bodily Injury, Property Damage, Medical Coverage", type: "mcq" },
-  { id: 14, question: "What does AMS stand for?", answer: "Agency Management System", type: "mcq" },
-  { id: 15, question: "What does an Umbrella policy provide?", answer: "Excess liability coverage beyond other policies", type: "mcq" },
-  { id: 16, question: "What is Gap Insurance?", answer: "Covers remaining loan balance after a total loss", type: "mcq" },
-  { id: 17, question: "What does NFIP stand for?", answer: "National Flood Insurance Program", type: "mcq" },
-  { id: 18, question: "Which homeowners policy offers the broadest coverage?", answer: "HO5", type: "mcq" },
-  { id: 19, question: "Glass coverage is most commonly associated with which policy?", answer: "Auto Policy", type: "mcq" },
-  { id: 20, question: "Which policy protects professionals against negligence claims?", answer: "E&O", type: "mcq" },
-  { id: 21, question: "What is required when quoting an Auto policy?", answer: "Drivers, VINs, and requested limits", type: "mcq" },
-  { id: 22, question: "What is an ACORD form?", answer: "Standard insurance application and endorsement form", type: "mcq" },
-  { id: 23, question: "What is a BOP?", answer: "Packaged commercial insurance policy", type: "mcq" },
-  { id: 24, question: "What does CLUE reference?", answer: "Claims history report before binding", type: "mcq" },
-  { id: 25, question: "What is a fiduciary?", answer: "Someone obligated to act in another's best interest", type: "mcq" },
-  { id: 26, question: "The person or party who owns an individual insurance policy is known as what?", answer: "Policy Owner", type: "mcq" },
-  { id: 27, question: "A person who makes an insurance claim is known as", answer: "Claimant", type: "mcq" },
-  { id: 28, question: "What happens when an insured doesn't make a payment", answer: "The policy will be cancelled", type: "mcq" },
-  { id: 29, question: "A Non-Renewal refers to what?", answer: "Carrier no longer offering coverage", type: "mcq" },
-  { id: 30, question: "What is the document called that lists the coverages of a policy?", answer: "Declarations Page", type: "mcq" },
-  { id: 31, question: "An insurance policy is a legal contract between the insured and the insurer.", answer: "TRUE", type: "tf" },
-  { id: 32, question: "Insurance fraud is illegal and can result in criminal charges.", answer: "TRUE", type: "tf" },
-  { id: 33, question: "All Auto policies cover flood damage.", answer: "FALSE", type: "tf" },
-  { id: 34, question: "Collision coverage will pay for the insured's vehicle to be fixed.", answer: "TRUE", type: "tf" },
-  { id: 35, question: "All states require the same level of auto insurance.", answer: "FALSE", type: "tf" },
-  { id: 36, question: "Homeowners insurance covers fire, hurricane, hail, and lightning.", answer: "TRUE", type: "tf" },
-  { id: 37, question: "Policies refer to loss events as perils.", answer: "TRUE", type: "tf" },
-  { id: 38, question: "Homeowners insurance covers land value.", answer: "FALSE", type: "tf" },
-  { id: 39, question: "Renters are required to have homeowners insurance.", answer: "FALSE", type: "tf" },
-  { id: 40, question: "Homeowners insurance pays for remodel upgrades.", answer: "FALSE", type: "tf" },
-  { id: 41, question: "Everyone pays the same premium for homeowners insurance.", answer: "FALSE", type: "tf" },
-  { id: 42, question: "Flood insurance is required for every homeowner.", answer: "FALSE", type: "tf" },
-  { id: 43, question: "Some carriers offer good student discounts.", answer: "TRUE", type: "tf" },
-  { id: 44, question: "Collision coverage protects against theft.", answer: "FALSE", type: "tf" },
-  { id: 45, question: "Higher deductibles reduce premiums.", answer: "TRUE", type: "tf" },
-  { id: 46, question: "Condo insurance is also called HO6.", answer: "TRUE", type: "tf" },
-  { id: 47, question: "Deductibles in insurance policies are the maximum amount of money the insured has to pay out of pocket before the insurance company starts to pay for covered expenses.", answer: "FALSE", type: "tf" },
-  { id: 48, question: "Insurance policies are legally binding contracts.", answer: "TRUE", type: "tf" },
-  { id: 49, question: "A policyholder may cancel anytime.", answer: "TRUE", type: "tf" },
-  { id: 50, question: "Insurance companies are unregulated.", answer: "FALSE", type: "tf" },
-  { id: 51, question: "Carriers give 90 days for missed payments.", answer: "FALSE", type: "tf" },
-  { id: 52, question: "LPR is the ACORD cancellation form.", answer: "TRUE", type: "tf" },
-  { id: 53, question: "Comprehensive coverage applies to non-collision losses.", answer: "TRUE", type: "tf" },
-  { id: 54, question: "Remarketing a policy means selling it to another agency.", answer: "FALSE", type: "tf" },
-  { id: 55, question: "A person who sells insurance policies is called an adjuster.", answer: "FALSE", type: "tf" },
-  { id: 56, question: "Cyber Liability insurance provides coverage for data breaches and cyber threats.", answer: "TRUE", type: "tf" },
-  { id: 57, question: "A quote is an offer for insurance coverage based on known information provided at the time.", answer: "TRUE", type: "tf" },
-  { id: 58, question: "The deductible is the amount the insurance company pays before the insured contributes to a loss.", answer: "FALSE", type: "tf" },
-  { id: 59, question: "E&S stands for Excess and Surplus lines insurance.", answer: "TRUE", type: "tf" },
-  { id: 60, question: "The person or party responsible for an accident is referred to as the claimant.", answer: "FALSE", type: "tf" },
-  { id: 61, question: "A commercial client insured through an independent agency experiences three liability claims in two years. At renewal, their current carrier non-renews due to loss frequency. What is the most appropriate next step?", answer: "Explore surplus lines or non-admitted markets while fully disclosing coverage differences", type: "scenario" },
-  { id: 62, question: "An unlicensed VA gathers renewal information and learns the insured started a catering business from home. What is the most compliant course of action?", answer: "Immediately refer the matter to a licensed agent for coverage evaluation", type: "scenario" },
-  { id: 63, question: "The insured rejects higher liability limits and later has a catastrophic loss. What is most critical to the agency's defense?", answer: "Whether the insured signed a documented coverage rejection or selection form", type: "scenario" },
-  { id: 64, question: "A captive agent loses a client because the carrier exits the state. What constraint most likely applies?", answer: "The agent may be contractually prohibited from placing business outside the represented carrier", type: "scenario" },
-  { id: 65, question: "An agency deposits client premium payments into its operating account before remitting to carriers. What is the primary regulatory concern?", answer: "Violation of fiduciary duty regarding premium trust handling", type: "scenario" },
-  { id: 66, question: "Which activity would generally require an insurance license?", answer: "Explaining coverage differences and recommending one", type: "scenario" },
-  { id: 67, question: "Which task may be performed by an unlicensed VA without violating insurance regulations?", answer: "Collecting underwriting information using a pre-approved questionnaire", type: "scenario" },
-  { id: 68, question: "Which underwriting factor would most significantly affect auto liability rates?", answer: "Driver's prior violation history", type: "scenario" },
-  { id: 69, question: "What is the primary purpose of a binder in insurance?", answer: "To provide temporary evidence of coverage pending formal policy issuance", type: "scenario" },
-  { id: 70, question: "Which situation would most likely require a policy endorsement rather than issuance of a new policy?", answer: "The insured adds an additional insured to an existing in-force commercial policy", type: "scenario" }
-];
-
-const DRAG_ITEMS = [
-  { id: 71, label: "Dwelling Coverage", answer: "HOME" },
-  { id: 72, label: "Other Structures", answer: "HOME" },
-  { id: 73, label: "Personal Property", answer: "HOME" },
-  { id: 74, label: "Loss of Use", answer: "HOME" },
-  { id: 75, label: "Personal Liability", answer: "HOME" },
-  { id: 76, label: "Medical Payments to Others", answer: "HOME" },
-  { id: 77, label: "Ordinance or Law", answer: "HOME" },
-  { id: 78, label: "Earthquake Endorsement", answer: "HOME" },
-  { id: 79, label: "Flood Endorsement", answer: "HOME" },
-  { id: 80, label: "Scheduled Personal Property", answer: "HOME" },
-  { id: 81, label: "Liability (BI/PD)", answer: "AUTO" },
-  { id: 82, label: "Collision Coverage", answer: "AUTO" },
-  { id: 83, label: "Comprehensive Coverage", answer: "AUTO" },
-  { id: 84, label: "Uninsured Motorist", answer: "AUTO" },
-  { id: 85, label: "Underinsured Motorist", answer: "AUTO" },
-  { id: 86, label: "Medical Payments (MedPay)", answer: "AUTO" },
-  { id: 87, label: "Personal Injury Protection (PIP)", answer: "AUTO" },
-  { id: 88, label: "Rental Reimbursement", answer: "AUTO" },
-  { id: 89, label: "Towing & Labor", answer: "AUTO" },
-  { id: 90, label: "Gap Insurance", answer: "AUTO" }
-];
-
-function shuffle(items) {
-  const copy = [...items];
-  for (let i = copy.length - 1; i > 0; i -= 1) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [copy[i], copy[j]] = [copy[j], copy[i]];
-  }
-  return copy;
-}
-
-const answerPool = [...new Set(OBJECTIVE_QUESTIONS.filter((q) => q.type !== "tf").map((q) => q.answer))];
-
-function buildOptions(question) {
-  if (question.type === "tf") return ["TRUE", "FALSE"];
-  const distractors = shuffle(answerPool.filter((item) => item !== question.answer)).slice(0, 3);
-  return shuffle([question.answer, ...distractors]);
-}
-
-function formatTime(totalSeconds) {
-  const minutes = Math.floor(totalSeconds / 60);
-  const seconds = totalSeconds % 60;
-  return `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
-}
-
-function makeCertificateNumber() {
-  return `LAVA-IPL-${Date.now().toString().slice(-8)}`;
-}
-
-function HomeShieldIcon() {
-  return (
-    <svg viewBox="0 0 120 120" className="zone-svg" aria-hidden="true">
-      <defs>
-        <linearGradient id="homeGlow" x1="0%" y1="0%" x2="100%" y2="100%">
-          <stop offset="0%" stopColor="#ff8a00" />
-          <stop offset="100%" stopColor="#ef4444" />
-        </linearGradient>
-      </defs>
-      <circle cx="60" cy="60" r="54" fill="url(#homeGlow)" opacity="0.2" />
-      <path d="M32 58L60 34L88 58V87C88 90 86 92 83 92H37C34 92 32 90 32 87V58Z" fill="none" stroke="#fff" strokeWidth="6" strokeLinejoin="round" />
-      <path d="M50 92V70H70V92" fill="none" stroke="#fff" strokeWidth="6" strokeLinejoin="round" />
-      <path d="M42 49V34H53V41" fill="none" stroke="#fff" strokeWidth="6" strokeLinecap="round" strokeLinejoin="round" />
-      <path d="M78 32C88 34 94 42 94 52C94 72 60 92 60 92C60 92 26 72 26 52C26 42 32 34 42 32" fill="none" stroke="#ffd7aa" strokeWidth="4" strokeLinecap="round" />
-    </svg>
-  );
-}
-
-function AutoShieldIcon() {
-  return (
-    <svg viewBox="0 0 120 120" className="zone-svg" aria-hidden="true">
-      <defs>
-        <linearGradient id="autoGlow" x1="0%" y1="0%" x2="100%" y2="100%">
-          <stop offset="0%" stopColor="#ff6a00" />
-          <stop offset="100%" stopColor="#dc2626" />
-        </linearGradient>
-      </defs>
-      <circle cx="60" cy="60" r="54" fill="url(#autoGlow)" opacity="0.2" />
-      <path d="M29 69L36 53C37 49 40 47 44 47H76C80 47 83 49 84 53L91 69V82C91 85 89 87 86 87H82C79 87 77 85 77 82V79H43V82C43 85 41 87 38 87H34C31 87 29 85 29 82V69Z" fill="none" stroke="#fff" strokeWidth="6" strokeLinejoin="round" />
-      <circle cx="43" cy="78" r="7" fill="none" stroke="#fff" strokeWidth="5" />
-      <circle cx="77" cy="78" r="7" fill="none" stroke="#fff" strokeWidth="5" />
-      <path d="M40 60H80" stroke="#ffd7aa" strokeWidth="4" strokeLinecap="round" />
-      <path d="M56 29C74 31 92 43 92 58C92 80 60 94 60 94C60 94 28 80 28 58C28 43 46 31 64 29" fill="none" stroke="#ffd7aa" strokeWidth="4" strokeLinecap="round" />
-    </svg>
-  );
-}
-
-export default function LavaInsuranceFinalExam() {
-  const [seed, setSeed] = useState(Date.now());
-  const [name, setName] = useState("");
-  const [agency, setAgency] = useState("");
-  const [answers, setAnswers] = useState({});
-  const [placements, setPlacements] = useState({});
-  const [draggingId, setDraggingId] = useState(null);
-  const [result, setResult] = useState(null);
-  const [message, setMessage] = useState("");
-  const [showReview, setShowReview] = useState(false);
-  const [hasStarted, setHasStarted] = useState(false);
-  const [secondsLeft, setSecondsLeft] = useState(EXAM_TIME_MINUTES * 60);
-  const [cloudStatus, setCloudStatus] = useState(supabase ? "Connected" : "Offline mode");
-  const [dropFlash, setDropFlash] = useState("");
-  const autoSubmitRef = useRef(false);
-  const audioCtxRef = useRef(null);
-
-  const questions = useMemo(() => {
-    return shuffle(OBJECTIVE_QUESTIONS).map((q) => ({
-      ...q,
-      options: buildOptions(q),
-    }));
-  }, [seed]);
-
-  const totalItems = questions.length + DRAG_ITEMS.length;
-  const completedItems = Object.keys(answers).length + Object.keys(placements).length;
-  const progress = Math.round((completedItems / totalItems) * 100);
-  const currentDragItem = DRAG_ITEMS.find((item) => !placements[item.id]) || null;
-  const dragCompletedCount = Object.keys(placements).length;
-
-  useEffect(() => {
-    document.title = "LAVA Insurance Personal Lines Final Exam";
-    let favicon = document.querySelector("link[rel='icon']");
-    if (!favicon) {
-      favicon = document.createElement("link");
-      favicon.rel = "icon";
-      document.head.appendChild(favicon);
-    }
-    favicon.href = "/favicon.png";
-  }, []);
-
-  useEffect(() => {
-    if (!hasStarted || result) return;
-    const timer = setInterval(() => {
-      setSecondsLeft((prev) => {
-        if (prev <= 1) {
-          clearInterval(timer);
-          return 0;
-        }
-        return prev - 1;
-      });
-    }, 1000);
-    return () => clearInterval(timer);
-  }, [hasStarted, result]);
-
-  useEffect(() => {
-    if (secondsLeft === 0 && hasStarted && !result && !autoSubmitRef.current) {
-      autoSubmitRef.current = true;
-      playToneSequence([240, 200, 180], 0.18, "triangle");
-      submitExam(true);
-    }
-  }, [secondsLeft, hasStarted, result]);
-
-  function ensureAudio() {
-    if (typeof window === "undefined") return null;
-    if (!audioCtxRef.current) {
-      const AudioClass = window.AudioContext || window.webkitAudioContext;
-      if (!AudioClass) return null;
-      audioCtxRef.current = new AudioClass();
-    }
-    return audioCtxRef.current;
-  }
-
-  function playToneSequence(frequencies, duration = 0.08, type = "sine") {
-    const ctx = ensureAudio();
-    if (!ctx) return;
-    const start = ctx.currentTime;
-    frequencies.forEach((frequency, index) => {
-      const oscillator = ctx.createOscillator();
-      const gain = ctx.createGain();
-      oscillator.type = type;
-      oscillator.frequency.value = frequency;
-      gain.gain.setValueAtTime(0.0001, start + index * duration);
-      gain.gain.exponentialRampToValueAtTime(0.06, start + index * duration + 0.01);
-      gain.gain.exponentialRampToValueAtTime(0.0001, start + index * duration + duration);
-      oscillator.connect(gain);
-      gain.connect(ctx.destination);
-      oscillator.start(start + index * duration);
-      oscillator.stop(start + index * duration + duration + 0.02);
-    });
-  }
-
-  function playTap() {
-    playToneSequence([640], 0.06, "square");
-  }
-
-  function playDrop() {
-    playToneSequence([420, 520], 0.08, "sine");
-  }
-
-  function playPass() {
-    playToneSequence([392, 523, 659, 784], 0.14, "triangle");
-  }
-
-  function playFail() {
-    playToneSequence([320, 240, 170], 0.16, "sawtooth");
-  }
-
-  function beginExam() {
-    setHasStarted(true);
-    playTap();
-  }
-
-  function randomizeAndReset() {
-    setSeed(Date.now());
-    setAnswers({});
-    setPlacements({});
-    setDraggingId(null);
-    setResult(null);
-    setMessage("");
-    setShowReview(false);
-    setHasStarted(false);
-    setSecondsLeft(EXAM_TIME_MINUTES * 60);
-    autoSubmitRef.current = false;
-    setDropFlash("");
-    playTap();
-  }
-
-  function onAnswerChange(questionId, value) {
-    if (!hasStarted) setHasStarted(true);
-    setAnswers((prev) => ({ ...prev, [questionId]: value }));
-  }
-
-  function handleDrop(target) {
-    if (!currentDragItem || draggingId !== currentDragItem.id) return;
-    if (!hasStarted) setHasStarted(true);
-    setPlacements((prev) => ({ ...prev, [currentDragItem.id]: target }));
-    setDraggingId(null);
-    setDropFlash(target);
-    playDrop();
-    setTimeout(() => setDropFlash(""), 450);
-  }
-
-  async function saveResultToSupabase(payload) {
-    if (!supabase) return;
-    setCloudStatus("Saving...");
-    const { error } = await supabase.from("exam_results").insert(payload);
-    if (error) {
-      setCloudStatus("Save failed");
-      console.error(error);
-    } else {
-      setCloudStatus("Saved to Supabase");
-    }
-  }
-
-  function downloadCertificatePDF(nameValue, agencyValue, examResult) {
-    const pdf = new jsPDF({ orientation: "landscape", unit: "pt", format: "a4" });
-    const w = pdf.internal.pageSize.getWidth();
-    const h = pdf.internal.pageSize.getHeight();
-
-    pdf.setFillColor(255, 247, 237);
-    pdf.rect(18, 18, w - 36, h - 36, "F");
-    pdf.setDrawColor(245, 158, 11);
-    pdf.setLineWidth(6);
-    pdf.rect(24, 24, w - 48, h - 48);
-    pdf.setDrawColor(55, 65, 81);
-    pdf.setLineWidth(1.5);
-    pdf.rect(42, 42, w - 84, h - 84);
-
-    pdf.setFont("helvetica", "bold");
-    pdf.setTextColor(107, 114, 128);
-    pdf.setFontSize(13);
-    pdf.text("CERTIFICATE OF COMPLETION", w / 2, 92, { align: "center" });
-
-    pdf.setTextColor(17, 24, 39);
-    pdf.setFontSize(30);
-    pdf.text("Insurance Personal Lines", w / 2, 146, { align: "center" });
-
-    pdf.setFont("helvetica", "normal");
-    pdf.setTextColor(75, 85, 99);
-    pdf.setFontSize(17);
-    pdf.text("Final Examination Pass Certificate", w / 2, 176, { align: "center" });
-
-    pdf.setFont("helvetica", "bold");
-    pdf.setFontSize(11);
-    pdf.setTextColor(107, 114, 128);
-    pdf.text("THIS CERTIFIES THAT", w / 2, 224, { align: "center" });
-
-    pdf.setTextColor(17, 24, 39);
-    pdf.setFontSize(28);
-    pdf.text(nameValue || "Trainee", w / 2, 266, { align: "center" });
-
-    pdf.setFont("helvetica", "normal");
-    pdf.setTextColor(55, 65, 81);
-    pdf.setFontSize(15);
-    const bodyText = `has successfully passed the Insurance Personal Lines Final Exam with a score of ${examResult.percentage}% and met the LAVA passing standard of ${PASSING_SCORE}%.`;
-    pdf.text(bodyText, w / 2, 312, { maxWidth: 560, align: "center" });
-
-    pdf.setFont("helvetica", "bold");
-    pdf.setTextColor(17, 24, 39);
-    pdf.setFontSize(13);
-    pdf.text(`Certificate No: ${examResult.certificateNumber}`, 90, 404);
-    pdf.text(`Agency: ${agencyValue || "LAVA Training Batch"}`, 90, 432);
-    pdf.text(`Date Issued: ${examResult.date}`, 90, 460);
-    pdf.text(`Objective Score: ${examResult.objectiveCorrect}/70`, w - 270, 404);
-    pdf.text(`Drag-and-Drop Score: ${examResult.dragCorrect}/20`, w - 270, 432);
-    pdf.text(`Overall Score: ${examResult.percentage}%`, w - 270, 460);
-
-    pdf.setDrawColor(107, 114, 128);
-    pdf.line(120, h - 110, 300, h - 110);
-    pdf.line(w - 300, h - 110, w - 120, h - 110);
-    pdf.setFontSize(12);
-    pdf.text("Training Department", 210, h - 92, { align: "center" });
-    pdf.text("Authorized Signatory", w - 210, h - 92, { align: "center" });
-
-    pdf.save(`${(nameValue || "trainee").replace(/\s+/g, "_")}_LAVA_Insurance_Personal_Lines_Certificate.pdf`);
-  }
-
-  async function submitExam(isAutoSubmit = false) {
-    if (!name.trim()) {
-      setMessage("Please enter the trainee name first.");
-      playFail();
-      return;
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>LAVA Insurance Personal Lines Final Exam</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <style>
+    :root {
+      --bg-1: #090909;
+      --bg-2: #1a0507;
+      --bg-3: #43080f;
+      --red: #ef4444;
+      --red-2: #ff5b5b;
+      --orange: #ff7a00;
+      --gold: #ffb347;
+      --card: rgba(255,255,255,0.08);
+      --card-2: rgba(255,255,255,0.05);
+      --line: rgba(255,255,255,0.12);
+      --text: #ffffff;
+      --muted: #f5dede;
+      --success: #16a34a;
+      --danger: #ef4444;
+      --shadow: 0 18px 40px rgba(0,0,0,.35);
+      --radius: 24px;
     }
 
-    const missingQuestions = questions.filter((q) => !answers[q.id]).length;
-    const missingDrag = DRAG_ITEMS.filter((item) => !placements[item.id]).length;
-
-    if (!isAutoSubmit && (missingQuestions > 0 || missingDrag > 0)) {
-      setMessage(`Please finish all items first. Remaining: ${missingQuestions} dropdown question(s) and ${missingDrag} drag-and-drop item(s).`);
-      playFail();
-      return;
+    * { box-sizing: border-box; }
+    html, body { margin: 0; padding: 0; font-family: Arial, Helvetica, sans-serif; color: var(--text); }
+    body {
+      min-height: 100vh;
+      background:
+        radial-gradient(circle at 8% 10%, rgba(255,110,0,.18), transparent 18%),
+        radial-gradient(circle at 92% 12%, rgba(239,68,68,.18), transparent 22%),
+        radial-gradient(circle at 50% 100%, rgba(255,150,50,.12), transparent 24%),
+        linear-gradient(135deg, var(--bg-1) 0%, var(--bg-2) 35%, var(--bg-3) 70%, #0c0c0c 100%);
+      overflow-x: hidden;
+      position: relative;
+    }
+    body::before,
+    body::after {
+      content: "";
+      position: fixed;
+      width: 420px;
+      height: 420px;
+      border-radius: 50%;
+      pointer-events: none;
+      filter: blur(90px);
+      opacity: .20;
+      z-index: 0;
+      animation: glowFloat 10s ease-in-out infinite;
+    }
+    body::before {
+      top: -80px;
+      left: -120px;
+      background: #ff4d00;
+    }
+    body::after {
+      bottom: -90px;
+      right: -100px;
+      background: #dc2626;
+      animation-delay: 2.2s;
+    }
+    .vector-overlay {
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      z-index: 0;
+      opacity: .28;
+      background-image:
+        linear-gradient(120deg, transparent 0 45%, rgba(255,255,255,.04) 45% 46%, transparent 46% 100%),
+        linear-gradient(160deg, transparent 0 58%, rgba(255,255,255,.03) 58% 59%, transparent 59% 100%),
+        linear-gradient(20deg, transparent 0 70%, rgba(255,255,255,.025) 70% 71%, transparent 71% 100%);
+    }
+    @keyframes glowFloat {
+      0%, 100% { transform: translateY(0) scale(1); }
+      50% { transform: translateY(-20px) scale(1.05); }
     }
 
-    const objectiveCorrect = questions.filter((q) => answers[q.id] === q.answer).length;
-    const dragCorrect = DRAG_ITEMS.filter((item) => placements[item.id] === item.answer).length;
-    const correct = objectiveCorrect + dragCorrect;
-    const percentage = Math.round((correct / totalItems) * 100);
-    const passed = percentage >= PASSING_SCORE;
-    const certificateNumber = makeCertificateNumber();
-    const examResult = {
-      objectiveCorrect,
-      dragCorrect,
-      correct,
-      percentage,
-      passed,
-      certificateNumber,
-      date: new Date().toLocaleDateString(),
-      missedQuestions: questions.filter((q) => answers[q.id] !== q.answer),
-      missedDrag: DRAG_ITEMS.filter((item) => placements[item.id] !== item.answer),
-    };
-
-    setResult(examResult);
-    setShowReview(!passed);
-    setHasStarted(false);
-
-    if (passed) {
-      playPass();
-      downloadCertificatePDF(name, agency, examResult);
-      setMessage("Passed. The certificate PDF was downloaded automatically.");
-    } else {
-      playFail();
-      setMessage(isAutoSubmit ? "Time is up. The exam was auto-submitted." : "The exam has been graded. Review the missed answers and retake if needed.");
+    .page {
+      position: relative;
+      z-index: 1;
+      width: min(1280px, calc(100% - 28px));
+      margin: 22px auto 40px;
     }
 
-    await saveResultToSupabase({
-      candidate_name: name,
-      agency,
-      score: percentage,
-      passed,
-      objective_correct: objectiveCorrect,
-      drag_correct: dragCorrect,
-      total_items: totalItems,
-      time_used_seconds: EXAM_TIME_MINUTES * 60 - secondsLeft,
-      certificate_number: certificateNumber,
-      answers,
-      drag_placements: placements,
-    });
-  }
+    .hero-grid,
+    .drag-grid,
+    .review-grid,
+    .stats-grid { display: grid; gap: 18px; }
+    .hero-grid { grid-template-columns: 1.28fr .72fr; }
+    .drag-grid { grid-template-columns: .92fr 1.08fr; }
+    .review-grid { grid-template-columns: 1fr 1fr; }
+    .stats-grid { grid-template-columns: repeat(4, 1fr); }
 
-  return (
-    <div className="lava-page">
-      <style>{`
-        * { box-sizing: border-box; }
-        body { margin: 0; font-family: Inter, Arial, sans-serif; background: #140707; }
-        .lava-page {
-          min-height: 100vh;
-          color: white;
-          background:
-            radial-gradient(circle at top left, rgba(255, 110, 36, 0.18), transparent 28%),
-            radial-gradient(circle at top right, rgba(220, 38, 38, 0.2), transparent 24%),
-            radial-gradient(circle at bottom, rgba(255, 150, 40, 0.14), transparent 24%),
-            linear-gradient(135deg, #140707 0%, #230909 26%, #391010 55%, #190909 100%);
-          padding: 24px;
-        }
-        .container { max-width: 1260px; margin: 0 auto; }
-        .card {
-          background: rgba(255,255,255,0.05);
-          border: 1px solid rgba(255,255,255,0.08);
-          border-radius: 28px;
-          padding: 24px;
-          backdrop-filter: blur(12px);
-          box-shadow: 0 16px 40px rgba(0,0,0,0.35);
-        }
-        .hero-grid, .review-grid, .drag-layout { display: grid; gap: 20px; }
-        .hero-grid { grid-template-columns: 1.35fr 0.85fr; margin-bottom: 24px; }
-        .review-grid { grid-template-columns: repeat(2, 1fr); }
-        .drag-layout { grid-template-columns: 0.88fr 1.12fr; align-items: stretch; }
-        .brand-row { display: flex; align-items: center; gap: 16px; margin-bottom: 16px; }
-        .logo-box {
-          width: 76px; height: 76px; border-radius: 22px;
-          display: flex; align-items: center; justify-content: center;
-          background: linear-gradient(135deg, rgba(255,106,0,0.18), rgba(239,68,68,0.18));
-          border: 1px solid rgba(255,255,255,0.1);
-          overflow: hidden;
-        }
-        .logo-img { width: 58px; height: 58px; object-fit: contain; }
-        .badge {
-          display: inline-flex; align-items: center; gap: 8px;
-          background: rgba(255,106,0,0.14); color: #ffd6b5;
-          border: 1px solid rgba(255,136,0,0.28); border-radius: 999px;
-          padding: 8px 14px; font-size: 12px; font-weight: 800; text-transform: uppercase; letter-spacing: 1px;
-          margin-bottom: 12px;
-        }
-        .title { font-size: 42px; line-height: 1.1; font-weight: 900; margin: 0 0 12px; }
-        .subtitle, .muted { color: #ebd7d7; line-height: 1.7; }
-        .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-top: 20px; }
-        .stat-box { background: rgba(0,0,0,0.22); border: 1px solid rgba(255,255,255,0.08); border-radius: 20px; padding: 16px; }
-        .stat-label { font-size: 13px; color: #dcc1c1; }
-        .stat-value { margin-top: 8px; font-size: 28px; font-weight: 900; color: #fff2ea; }
-        .label { display: block; font-size: 14px; color: #ffe4d4; margin-bottom: 8px; font-weight: 600; }
-        .input, .select {
-          width: 100%; border: 1px solid rgba(255,255,255,0.12); background: rgba(0,0,0,0.26);
-          color: white; border-radius: 18px; padding: 14px 16px; outline: none;
-        }
-        .input::placeholder { color: #b59d9d; }
-        .timer-card {
-          background: linear-gradient(135deg, rgba(255,106,0,0.14), rgba(239,68,68,0.1));
-          border: 1px solid rgba(255,255,255,0.08); border-radius: 22px; padding: 18px;
-        }
-        .timer-row, .progress-row, .button-row { display: flex; gap: 14px; flex-wrap: wrap; align-items: center; }
-        .timer-value {
-          font-size: 34px; font-weight: 900; letter-spacing: 1px;
-          color: ${"${secondsLeft <= 300 ? '#fecaca' : '#fff4ec'}"};
-        }
-        .status-pill {
-          display: inline-flex; align-items: center; border-radius: 999px; padding: 8px 12px;
-          font-size: 12px; font-weight: 800; background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.08);
-          color: #ffe4d4;
-        }
-        .progress-card { margin-bottom: 24px; }
-        .progress-row { justify-content: space-between; }
-        .progress-bar { flex: 1; min-width: 220px; height: 12px; background: rgba(255,255,255,0.08); border-radius: 999px; overflow: hidden; }
-        .progress-fill { height: 100%; background: linear-gradient(90deg, #ff6a00, #ef4444); border-radius: 999px; transition: width 0.3s ease; }
-        .section { margin-bottom: 24px; }
-        .section-title { font-size: 30px; font-weight: 900; margin: 0 0 10px; }
-        .question-card { margin-top: 14px; background: rgba(0,0,0,0.22); border: 1px solid rgba(255,255,255,0.08); border-radius: 22px; padding: 18px; }
-        .question-no { font-size: 12px; font-weight: 800; text-transform: uppercase; letter-spacing: 1px; color: #ffb58c; margin-bottom: 10px; }
-        .drag-current {
-          background: rgba(0,0,0,0.22); border: 1px solid rgba(255,255,255,0.08); border-radius: 26px; padding: 22px; min-height: 360px;
-          display: flex; flex-direction: column; justify-content: space-between;
-        }
-        .drag-pill {
-          display: inline-flex; align-items: center; padding: 8px 12px; border-radius: 999px;
-          background: rgba(255,106,0,0.14); border: 1px solid rgba(255,255,255,0.08); color: #ffd9c2;
-          font-size: 12px; font-weight: 800; margin-bottom: 12px;
-        }
-        .drag-card {
-          margin-top: 18px; border-radius: 26px; padding: 26px; text-align: center;
-          background: linear-gradient(135deg, rgba(255,106,0,0.22), rgba(239,68,68,0.2));
-          border: 1px solid rgba(255,255,255,0.12); font-size: 24px; font-weight: 900;
-          cursor: grab; user-select: none; transform-origin: center; box-shadow: 0 16px 30px rgba(0,0,0,0.28);
-          animation: popIn 0.35s ease, floatCard 2.8s ease-in-out infinite;
-        }
-        .drag-card:active { cursor: grabbing; transform: scale(1.02) rotate(-1deg); }
-        .drop-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 18px; }
-        .drop-zone {
-          min-height: 320px; border-radius: 28px; padding: 22px; border: 2px dashed rgba(255,255,255,0.12);
-          background: rgba(0,0,0,0.2); text-align: center; display: flex; align-items: center; justify-content: center; flex-direction: column;
-          transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
-          position: relative; overflow: hidden;
-        }
-        .drop-zone::before {
-          content: ""; position: absolute; inset: -40%;
-          background: radial-gradient(circle, rgba(255,128,0,0.18), transparent 46%);
-          opacity: 0; transition: opacity 0.25s ease;
-        }
-        .drop-zone.active::before, .drop-zone:hover::before { opacity: 1; }
-        .drop-zone.active, .drop-zone:hover {
-          border-color: rgba(255,147,85,0.42); transform: translateY(-3px); box-shadow: 0 16px 40px rgba(0,0,0,0.24);
-        }
-        .drop-zone.flash-home { animation: pulseHome 0.45s ease; }
-        .drop-zone.flash-auto { animation: pulseAuto 0.45s ease; }
-        .zone-svg { width: 98px; height: 98px; margin-bottom: 14px; }
-        .drop-title { font-size: 24px; font-weight: 900; margin-bottom: 8px; }
-        .drop-subtitle { color: #ebd7d7; font-size: 14px; line-height: 1.7; max-width: 280px; }
-        .drop-count { margin-top: 16px; display: inline-flex; padding: 8px 14px; border-radius: 999px; background: rgba(255,255,255,0.06); font-size: 13px; font-weight: 800; color: #ffe4d4; }
-        .btn {
-          border: 0; border-radius: 18px; padding: 14px 18px; font-weight: 900; cursor: pointer; transition: transform 0.15s ease, opacity 0.15s ease;
-        }
-        .btn:hover { transform: translateY(-1px); }
-        .btn-primary { background: linear-gradient(90deg, #ff6a00, #ef4444); color: white; }
-        .btn-secondary { background: rgba(255,255,255,0.06); color: white; border: 1px solid rgba(255,255,255,0.1); }
-        .btn-success { background: linear-gradient(90deg, #22c55e, #16a34a); color: white; }
-        .message { margin-top: 14px; border-radius: 18px; padding: 14px 16px; background: rgba(255,170,0,0.12); border: 1px solid rgba(255,170,0,0.22); color: #ffdba8; }
-        .result-badge { display: inline-flex; padding: 10px 16px; border-radius: 999px; font-weight: 900; margin-bottom: 16px; }
-        .pass { background: rgba(34,197,94,0.14); color: #b7f7cf; }
-        .fail { background: rgba(239,68,68,0.14); color: #fecaca; }
-        .review-item { background: rgba(0,0,0,0.22); border: 1px solid rgba(255,255,255,0.08); border-radius: 18px; padding: 16px; margin-top: 12px; }
-        .certificate {
-          background: white; color: #111827; border-radius: 30px; padding: 18px; border: 8px solid #f59e0b;
-          box-shadow: 0 20px 40px rgba(0,0,0,0.25);
-        }
-        .certificate-inner { border: 4px solid #e5e7eb; border-radius: 22px; padding: 40px 28px; text-align: center; }
-        .certificate-title { font-size: 42px; font-weight: 900; margin: 12px 0; }
-        .certificate-name { font-size: 36px; font-weight: 900; margin: 18px 0; }
-        .sign-row { display: grid; grid-template-columns: repeat(2, 1fr); gap: 30px; margin-top: 40px; }
-        .sign-line { border-top: 1px solid #6b7280; padding-top: 8px; font-size: 14px; font-weight: 700; }
-        .small-note { font-size: 13px; color: #d9bebe; }
-        @keyframes floatCard {
-          0%, 100% { transform: translateY(0px); }
-          50% { transform: translateY(-6px); }
-        }
-        @keyframes popIn {
-          0% { transform: scale(0.92); opacity: 0; }
-          100% { transform: scale(1); opacity: 1; }
-        }
-        @keyframes pulseHome {
-          0% { box-shadow: 0 0 0 rgba(249,115,22,0); }
-          50% { box-shadow: 0 0 0 14px rgba(249,115,22,0.12); }
-          100% { box-shadow: 0 0 0 rgba(249,115,22,0); }
-        }
-        @keyframes pulseAuto {
-          0% { box-shadow: 0 0 0 rgba(239,68,68,0); }
-          50% { box-shadow: 0 0 0 14px rgba(239,68,68,0.12); }
-          100% { box-shadow: 0 0 0 rgba(239,68,68,0); }
-        }
-        @media (max-width: 980px) {
-          .hero-grid, .review-grid, .drag-layout, .drop-grid, .stats { grid-template-columns: 1fr; }
-          .title { font-size: 32px; }
-          .drop-zone { min-height: 260px; }
-        }
-      `}</style>
+    .card {
+      background: linear-gradient(180deg, rgba(255,255,255,.085), rgba(255,255,255,.055));
+      border: 1px solid var(--line);
+      border-radius: 28px;
+      padding: 22px;
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(10px);
+    }
 
-      <div className="container">
-        <div className="hero-grid">
-          <div className="card">
-            <div className="brand-row">
-              <div className="logo-box">
-                <img
-                  src="/lava-logo.png"
-                  alt="LAVA Logo"
-                  className="logo-img"
-                  onError={(e) => {
-                    e.currentTarget.style.display = "none";
-                  }}
-                />
-              </div>
-              <div>
-                <div className="badge">LAVA Training Exam Portal</div>
-                <h1 className="title">Insurance Personal Lines Final Exam</h1>
-              </div>
-            </div>
-            <p className="subtitle">
-              This version includes a live timer, sound effects, animated drag-and-drop, automatic certificate PDF download for passers, and Supabase-ready cloud saving for GitHub + Netlify + Supabase deployments.
-            </p>
-            <div className="stats">
-              <div className="stat-box"><div className="stat-label">Passing Score</div><div className="stat-value">90%</div></div>
-              <div className="stat-box"><div className="stat-label">Question Bank</div><div className="stat-value">70</div></div>
-              <div className="stat-box"><div className="stat-label">Drag Items</div><div className="stat-value">20</div></div>
-              <div className="stat-box"><div className="stat-label">Cloud Status</div><div className="stat-value" style={{ fontSize: 20 }}>{cloudStatus}</div></div>
-            </div>
+    .brand-row {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      margin-bottom: 16px;
+    }
+    .logo-wrap {
+      width: 88px;
+      height: 88px;
+      border-radius: 24px;
+      display: grid;
+      place-items: center;
+      background: rgba(255,255,255,.07);
+      border: 1px solid rgba(255,255,255,.10);
+      overflow: hidden;
+      flex: 0 0 auto;
+    }
+    .logo-wrap img { width: 70px; height: 70px; object-fit: contain; }
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 14px;
+      border-radius: 999px;
+      background: rgba(255,122,0,.18);
+      border: 1px solid rgba(255,177,71,.24);
+      color: #ffe1c0;
+      font-size: 12px;
+      font-weight: 800;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      margin-bottom: 12px;
+    }
+    h1, h2, h3, h4, p { margin-top: 0; }
+    .hero-title {
+      font-size: clamp(30px, 4.4vw, 42px);
+      line-height: 1.06;
+      margin-bottom: 10px;
+      font-weight: 900;
+    }
+    .muted { color: var(--muted); line-height: 1.65; }
+    .field { margin-bottom: 14px; }
+    label { display: block; font-size: 14px; margin-bottom: 8px; color: #ffe4d0; font-weight: 700; }
+    input, select, button {
+      font: inherit;
+    }
+    input, select {
+      width: 100%;
+      padding: 14px 16px;
+      border-radius: 16px;
+      background: rgba(0,0,0,.22);
+      border: 1px solid rgba(255,255,255,.14);
+      color: #fff;
+      outline: none;
+    }
+    input::placeholder { color: #d3b2b2; }
+    select option { color: #111; }
+
+    .stats-grid .mini-card {
+      background: rgba(0,0,0,.22);
+      border: 1px solid rgba(255,255,255,.08);
+      border-radius: 20px;
+      padding: 16px;
+    }
+    .mini-label { font-size: 12px; color: #f1caca; }
+    .mini-value { font-size: 28px; font-weight: 900; margin-top: 8px; color: #fff3ea; }
+
+    .timer-box {
+      margin-top: 14px;
+      padding: 18px;
+      border-radius: 22px;
+      background: linear-gradient(135deg, rgba(255,122,0,.16), rgba(239,68,68,.14));
+      border: 1px solid rgba(255,255,255,.10);
+    }
+    .timer-value {
+      font-size: 36px;
+      font-weight: 900;
+      letter-spacing: 1px;
+      margin-bottom: 8px;
+    }
+    .timer-warning { color: #fecaca; }
+    .progress-row {
+      display: flex;
+      gap: 16px;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+    .progress-track {
+      flex: 1;
+      min-width: 240px;
+      height: 12px;
+      border-radius: 999px;
+      overflow: hidden;
+      background: rgba(255,255,255,.09);
+      border: 1px solid rgba(255,255,255,.08);
+    }
+    .progress-fill {
+      height: 100%;
+      background: linear-gradient(90deg, var(--orange), var(--red-2));
+      width: 0;
+      transition: width .25s ease;
+    }
+    .question-card {
+      margin-top: 14px;
+      border-radius: 20px;
+      padding: 18px;
+      background: rgba(0,0,0,.20);
+      border: 1px solid rgba(255,255,255,.08);
+    }
+    .question-number {
+      display: inline-flex;
+      padding: 7px 10px;
+      border-radius: 999px;
+      background: rgba(255,122,0,.14);
+      border: 1px solid rgba(255,177,71,.18);
+      color: #ffd1ac;
+      font-size: 12px;
+      font-weight: 800;
+      letter-spacing: .8px;
+      text-transform: uppercase;
+      margin-bottom: 12px;
+    }
+
+    .actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      margin-top: 12px;
+    }
+    .btn {
+      border: 0;
+      border-radius: 16px;
+      padding: 14px 18px;
+      font-weight: 900;
+      cursor: pointer;
+      transition: transform .16s ease, opacity .16s ease, box-shadow .16s ease;
+    }
+    .btn:hover { transform: translateY(-1px); }
+    .btn:disabled { opacity: .45; cursor: not-allowed; transform: none; }
+    .btn-primary {
+      color: #fff;
+      background: linear-gradient(90deg, var(--orange), var(--red));
+      box-shadow: 0 10px 20px rgba(239,68,68,.18);
+    }
+    .btn-secondary {
+      color: #fff;
+      background: rgba(255,255,255,.08);
+      border: 1px solid rgba(255,255,255,.12);
+    }
+    .btn-success {
+      color: #fff;
+      background: linear-gradient(90deg, #16a34a, #22c55e);
+    }
+    .btn-danger {
+      color: #fff;
+      background: linear-gradient(90deg, #b91c1c, #ef4444);
+    }
+
+    .message {
+      margin-top: 14px;
+      padding: 14px 16px;
+      border-radius: 16px;
+      background: rgba(255,177,71,.12);
+      border: 1px solid rgba(255,177,71,.24);
+      color: #ffe0ac;
+      white-space: pre-wrap;
+    }
+
+    .drag-side {
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      min-height: 360px;
+    }
+    .drag-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      border-radius: 999px;
+      padding: 8px 12px;
+      background: rgba(255,122,0,.14);
+      border: 1px solid rgba(255,177,71,.18);
+      color: #ffd7bb;
+      font-size: 12px;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: .8px;
+      margin-bottom: 12px;
+    }
+    .drag-card {
+      padding: 26px;
+      text-align: center;
+      font-size: 24px;
+      font-weight: 900;
+      border-radius: 26px;
+      background: linear-gradient(135deg, rgba(255,122,0,.22), rgba(239,68,68,.22));
+      border: 1px solid rgba(255,255,255,.12);
+      box-shadow: 0 14px 32px rgba(0,0,0,.24);
+      user-select: none;
+      cursor: grab;
+      animation: popIn .35s ease, floatCard 2.8s ease-in-out infinite;
+      margin-top: 16px;
+    }
+    .drag-card:active { cursor: grabbing; }
+    @keyframes popIn { from { transform: scale(.94); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+    @keyframes floatCard { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-6px); } }
+    .drop-zones {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 18px;
+    }
+    .drop-zone {
+      min-height: 310px;
+      border-radius: 26px;
+      padding: 22px;
+      background: rgba(0,0,0,.18);
+      border: 2px dashed rgba(255,255,255,.12);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      transition: transform .18s ease, border-color .18s ease, box-shadow .18s ease;
+      position: relative;
+      overflow: hidden;
+    }
+    .drop-zone::before {
+      content: "";
+      position: absolute;
+      inset: -35%;
+      background: radial-gradient(circle, rgba(255,140,0,.18), transparent 42%);
+      opacity: 0;
+      transition: opacity .25s ease;
+    }
+    .drop-zone:hover,
+    .drop-zone.active {
+      transform: translateY(-2px);
+      border-color: rgba(255,177,71,.34);
+      box-shadow: 0 14px 32px rgba(0,0,0,.22);
+    }
+    .drop-zone:hover::before,
+    .drop-zone.active::before { opacity: 1; }
+    .drop-zone.flash-home { box-shadow: 0 0 0 16px rgba(255,140,0,.10); }
+    .drop-zone.flash-auto { box-shadow: 0 0 0 16px rgba(239,68,68,.10); }
+    .zone-icon {
+      width: 88px;
+      height: 88px;
+      display: grid;
+      place-items: center;
+      border-radius: 50%;
+      font-size: 40px;
+      background: linear-gradient(135deg, rgba(255,122,0,.25), rgba(239,68,68,.20));
+      border: 1px solid rgba(255,255,255,.12);
+      margin-bottom: 14px;
+      position: relative;
+      z-index: 1;
+    }
+    .zone-title, .zone-text, .zone-pill { position: relative; z-index: 1; }
+    .zone-title { font-size: 24px; font-weight: 900; margin-bottom: 8px; }
+    .zone-text { color: var(--muted); line-height: 1.6; }
+    .zone-pill {
+      margin-top: 14px;
+      border-radius: 999px;
+      padding: 8px 14px;
+      background: rgba(255,255,255,.07);
+      border: 1px solid rgba(255,255,255,.10);
+      font-size: 13px;
+      font-weight: 800;
+      color: #ffe7d4;
+    }
+
+    .result-badge {
+      display: inline-flex;
+      align-items: center;
+      padding: 10px 16px;
+      border-radius: 999px;
+      font-weight: 900;
+      margin-bottom: 16px;
+    }
+    .result-pass { background: rgba(34,197,94,.14); color: #b8f7cf; }
+    .result-fail { background: rgba(239,68,68,.14); color: #fecaca; }
+    .review-item {
+      margin-top: 12px;
+      padding: 14px;
+      border-radius: 16px;
+      background: rgba(0,0,0,.18);
+      border: 1px solid rgba(255,255,255,.08);
+    }
+
+    .certificate {
+      background: #ffffff;
+      color: #111827;
+      border-radius: 30px;
+      padding: 18px;
+      border: 8px solid #f59e0b;
+      box-shadow: 0 18px 40px rgba(0,0,0,.24);
+    }
+    .certificate-inner {
+      border: 4px solid #e5e7eb;
+      border-radius: 22px;
+      padding: 40px 28px;
+      text-align: center;
+    }
+    .cert-logo {
+      width: 92px;
+      height: 92px;
+      object-fit: contain;
+      margin-bottom: 10px;
+    }
+    .cert-small {
+      font-size: 12px;
+      font-weight: 800;
+      letter-spacing: 3px;
+      text-transform: uppercase;
+      color: #6b7280;
+    }
+    .cert-title { font-size: 40px; font-weight: 900; margin: 14px 0 10px; }
+    .cert-name { font-size: 34px; font-weight: 900; margin: 16px 0; }
+    .cert-body {
+      max-width: 760px;
+      margin: 0 auto;
+      font-size: 18px;
+      line-height: 1.8;
+      color: #374151;
+    }
+    .cert-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 12px;
+      margin-top: 24px;
+    }
+    .cert-mini {
+      background: #f9fafb;
+      border: 1px solid #e5e7eb;
+      border-radius: 18px;
+      padding: 14px;
+    }
+    .cert-mini-label { font-size: 12px; color: #6b7280; }
+    .cert-mini-value { margin-top: 8px; font-size: 20px; font-weight: 800; color: #111827; }
+    .cert-signs {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 30px;
+      margin-top: 40px;
+    }
+    .cert-line {
+      border-top: 1px solid #6b7280;
+      padding-top: 8px;
+      font-size: 14px;
+      font-weight: 700;
+    }
+
+    .modal-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,.62);
+      backdrop-filter: blur(6px);
+      display: grid;
+      place-items: center;
+      z-index: 50;
+      padding: 16px;
+    }
+    .modal-card {
+      width: min(460px, 100%);
+      background: linear-gradient(180deg, rgba(30,8,8,.98), rgba(22,8,8,.96));
+      border: 1px solid rgba(255,255,255,.10);
+      border-radius: 24px;
+      padding: 22px;
+      box-shadow: 0 20px 40px rgba(0,0,0,.35);
+    }
+    .answer-key-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 18px;
+      margin-top: 18px;
+    }
+    .status-correct { color: #86efac; font-weight: 700; }
+    .status-wrong { color: #fca5a5; font-weight: 700; }
+    .hidden { display: none !important; }
+
+    @media (max-width: 980px) {
+      .hero-grid, .drag-grid, .review-grid, .stats-grid, .cert-grid, .drop-zones, .answer-key-grid { grid-template-columns: 1fr; }
+      .page { width: min(100% - 18px, 1280px); }
+      .hero-title { font-size: 30px; }
+      .drop-zone { min-height: 250px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="vector-overlay"></div>
+  <div class="page">
+    <div class="hero-grid">
+      <section class="card">
+        <div class="brand-row">
+          <div class="logo-wrap"><img id="logoExam" alt="LAVA Logo" /></div>
+          <div>
+            <div class="badge">LAVA Training Exam Portal</div>
+            <h1 class="hero-title">Insurance Personal Lines Final Exam</h1>
           </div>
+        </div>
+        <p class="muted">
+          This standalone exam has a <strong>30-minute timer</strong>, a strict <strong>3-take limit</strong>, a <strong>90% passing score</strong>, randomized dropdown questions with proper counting, one-by-one drag-and-drop, and automatic certificate generation for passers.
+        </p>
+        <div class="stats-grid">
+          <div class="mini-card"><div class="mini-label">Passing Score</div><div class="mini-value">90%</div></div>
+          <div class="mini-card"><div class="mini-label">Timer</div><div class="mini-value">30 Min</div></div>
+          <div class="mini-card"><div class="mini-label">Max Takes</div><div class="mini-value">3</div></div>
+          <div class="mini-card"><div class="mini-label">Format</div><div class="mini-value">Standalone</div></div>
+        </div>
+      </section>
 
-          <div className="card">
-            <h2 style={{ marginTop: 0 }}>Trainee Information</h2>
-            <div style={{ marginBottom: 16 }}>
-              <label className="label">Full Name</label>
-              <input className="input" placeholder="Enter trainee name" value={name} onChange={(e) => setName(e.target.value)} />
-            </div>
-            <div style={{ marginBottom: 18 }}>
-              <label className="label">Agency / Team</label>
-              <input className="input" placeholder="Enter agency or batch" value={agency} onChange={(e) => setAgency(e.target.value)} />
-            </div>
-            <div className="timer-card">
-              <div className="timer-row" style={{ justifyContent: "space-between" }}>
-                <div>
-                  <div className="stat-label">Exam Timer</div>
-                  <div className="timer-value">{formatTime(secondsLeft)}</div>
-                </div>
-                <div className="status-pill">{hasStarted ? "Running" : result ? "Completed" : "Not started"}</div>
-              </div>
-              <div className="small-note" style={{ marginTop: 10 }}>
-                The timer begins when the trainee starts answering or when Start Exam is clicked. If time runs out, the exam is auto-submitted.
-              </div>
-            </div>
-            <div className="button-row" style={{ marginTop: 16 }}>
-              {!hasStarted && !result && <button className="btn btn-primary" onClick={beginExam}>Start Exam</button>}
-              <button className="btn btn-secondary" onClick={randomizeAndReset}>Reset / Shuffle</button>
+      <section class="card">
+        <h2>Trainee Information</h2>
+        <div class="field">
+          <label for="candidateName">Full Name</label>
+          <input id="candidateName" type="text" placeholder="Enter trainee name" />
+        </div>
+        <div class="field">
+          <label for="agencyName">Agency / Team</label>
+          <input id="agencyName" type="text" placeholder="Enter agency or batch" />
+        </div>
+        <div class="field">
+          <label for="trainerName">Trainer Name</label>
+          <input id="trainerName" type="text" value="LAVA Training Department" />
+        </div>
+        <div class="timer-box">
+          <div class="mini-label">Exam Timer</div>
+          <div id="timerValue" class="timer-value">30:00</div>
+          <p class="muted" style="margin-bottom: 0">Attempts used: <strong id="attemptsUsed">0</strong> / 3</p>
+          <p class="muted" style="margin: 4px 0 0">Current take: <strong id="currentTake">-</strong></p>
+        </div>
+        <div class="actions">
+          <button id="shuffleBtn" class="btn btn-secondary">Shuffle Questions</button>
+          <button id="startBtn" class="btn btn-primary">Start Exam</button>
+          <button id="resetBtn" class="btn btn-secondary">Reset Current Form</button>
+        </div>
+      </section>
+    </div>
+
+    <section class="card" style="margin-bottom: 18px">
+      <div class="progress-row">
+        <div>
+          <h3 style="margin-bottom: 6px">Exam Progress</h3>
+          <div class="muted">Completed <strong id="progressText">0</strong> of <strong id="totalItems">0</strong> items</div>
+        </div>
+        <div style="display:flex; align-items:center; gap:12px; width:min(100%, 560px)">
+          <div class="progress-track"><div id="progressFill" class="progress-fill"></div></div>
+          <strong id="progressPct">0%</strong>
+        </div>
+      </div>
+    </section>
+
+    <section class="card" style="margin-bottom: 18px">
+      <h2>Section 1: Randomized Dropdown Questionnaire</h2>
+      <p class="muted">Questions are randomized, but the visible numbering always follows proper counting order.</p>
+      <div id="questionsContainer"></div>
+    </section>
+
+    <section class="card" style="margin-bottom: 18px">
+      <h2>Section 2: Drag and Drop</h2>
+      <p class="muted">Only one drag item appears at a time. You may drag it or use the quick place buttons below it.</p>
+      <div class="drag-grid">
+        <div class="question-card drag-side">
+          <div>
+            <div id="dragProgress" class="drag-chip">Progress: 0 / 20</div>
+            <h3>Current Coverage Item</h3>
+            <p class="muted">Place the current item into <strong>Home Insurance</strong> or <strong>Auto Insurance</strong>.</p>
+            <div id="dragItemWrap"></div>
+          </div>
+          <div>
+            <div class="actions" style="margin-top: 18px">
+              <button id="placeHomeBtn" class="btn btn-secondary">Place in Home</button>
+              <button id="placeAutoBtn" class="btn btn-secondary">Place in Auto</button>
             </div>
           </div>
         </div>
-
-        <div className="card progress-card">
-          <div className="progress-row">
-            <div>
-              <h3 style={{ margin: "0 0 6px" }}>Exam Progress</h3>
-              <div className="muted">Completed {completedItems} of {totalItems} items</div>
-            </div>
-            <div style={{ display: "flex", alignItems: "center", gap: 12, width: "100%", maxWidth: 520 }}>
-              <div className="progress-bar"><div className="progress-fill" style={{ width: `${progress}%` }} /></div>
-              <strong>{progress}%</strong>
-            </div>
+        <div class="drop-zones">
+          <div id="homeZone" class="drop-zone">
+            <div class="zone-icon">🏠</div>
+            <div class="zone-title">Home Insurance</div>
+            <div class="zone-text">Dwelling, structures, personal property, loss of use, and home endorsements.</div>
+            <div id="homeCount" class="zone-pill">Matched: 0</div>
+          </div>
+          <div id="autoZone" class="drop-zone">
+            <div class="zone-icon">🚗</div>
+            <div class="zone-title">Auto Insurance</div>
+            <div class="zone-text">Liability, collision, comprehensive, medical, and other vehicle-related coverages.</div>
+            <div id="autoCount" class="zone-pill">Matched: 0</div>
           </div>
         </div>
+      </div>
+    </section>
 
-        <div className="card section">
-          <h2 className="section-title">Section 1: Randomized Dropdown Questionnaire</h2>
-          <p className="muted">These questions reshuffle every time the exam is reset or the page is refreshed.</p>
-          {questions.map((q) => (
-            <div key={q.id} className="question-card">
-              <div className="question-no">Question {q.id}</div>
-              <p style={{ lineHeight: 1.7 }}>{q.question}</p>
-              <select className="select" value={answers[q.id] || ""} onChange={(e) => onAnswerChange(q.id, e.target.value)}>
-                <option value="">Select your answer</option>
-                {q.options.map((option) => <option key={option} value={option}>{option}</option>)}
-              </select>
-            </div>
-          ))}
+    <section class="card" style="margin-bottom: 18px">
+      <div class="actions">
+        <button id="submitBtn" class="btn btn-primary">Submit Final Exam</button>
+        <button id="adminAccessBtn" class="btn btn-secondary hidden">Admin Review</button>
+        <button id="nextTakeBtn" class="btn btn-danger hidden">Prepare Next Take</button>
+        <button id="downloadCertificateBtn" class="btn btn-success hidden">Download Certificate Again</button>
+      </div>
+      <div id="messageBox" class="message hidden"></div>
+    </section>
+
+    <section id="resultCard" class="card hidden" style="margin-bottom: 18px"></section>
+
+    <section id="certificateCard" class="certificate hidden">
+      <div class="certificate-inner">
+        <img id="logoCert" class="cert-logo" alt="LAVA Logo" />
+        <div class="cert-small">Certificate of Completion</div>
+        <div class="cert-title">Insurance Personal Lines</div>
+        <div style="font-size: 22px; color: #4b5563; margin-bottom: 24px;">Final Examination Pass Certificate</div>
+        <div class="cert-small">This certifies that</div>
+        <div id="certName" class="cert-name">Trainee Name</div>
+        <p id="certBody" class="cert-body"></p>
+        <div class="cert-grid">
+          <div class="cert-mini"><div class="cert-mini-label">Trainee</div><div id="certMiniName" class="cert-mini-value"></div></div>
+          <div class="cert-mini"><div class="cert-mini-label">Agency</div><div id="certMiniAgency" class="cert-mini-value"></div></div>
+          <div class="cert-mini"><div class="cert-mini-label">Trainer</div><div id="certMiniTrainer" class="cert-mini-value"></div></div>
+          <div class="cert-mini"><div class="cert-mini-label">Date Issued</div><div id="certMiniDate" class="cert-mini-value"></div></div>
         </div>
-
-        <div className="card section">
-          <h2 className="section-title">Section 2: Animated Drag and Drop</h2>
-          <p className="muted">Only one drag card appears at a time. Drop it into the correct category to reveal the next item.</p>
-          <div className="drag-layout">
-            <div className="drag-current">
-              <div>
-                <div className="drag-pill">Progress: {dragCompletedCount} / {DRAG_ITEMS.length}</div>
-                {currentDragItem ? (
-                  <>
-                    <h3 style={{ marginTop: 0 }}>Current Coverage Item</h3>
-                    <p className="muted">Drag the animated card below into Home Insurance or Auto Insurance.</p>
-                    <div
-                      key={currentDragItem.id}
-                      className="drag-card"
-                      draggable
-                      onDragStart={() => {
-                        if (!hasStarted) setHasStarted(true);
-                        setDraggingId(currentDragItem.id);
-                        playTap();
-                      }}
-                      onDragEnd={() => setDraggingId(null)}
-                    >
-                      {currentDragItem.label}
-                    </div>
-                  </>
-                ) : (
-                  <div className="question-card">
-                    <h3 style={{ marginTop: 0, marginBottom: 8 }}>Drag-and-drop complete</h3>
-                    <p className="muted" style={{ marginBottom: 0 }}>All matching items have been answered.</p>
-                  </div>
-                )}
-              </div>
-              <div className="small-note">
-                Drag questions do not show as a list. The next card pops in automatically after each drop.
-              </div>
-            </div>
-
-            <div className="drop-grid">
-              <div
-                className={`drop-zone ${(draggingId && currentDragItem) ? "active" : ""} ${dropFlash === "HOME" ? "flash-home" : ""}`}
-                onDragOver={(e) => e.preventDefault()}
-                onDrop={() => handleDrop("HOME")}
-              >
-                <HomeShieldIcon />
-                <div className="drop-title">Home Insurance</div>
-                <div className="drop-subtitle">Dwelling, structures, personal property, loss of use, and home endorsements.</div>
-                <div className="drop-count">Matched: {Object.values(placements).filter((p) => p === "HOME").length}</div>
-              </div>
-
-              <div
-                className={`drop-zone ${(draggingId && currentDragItem) ? "active" : ""} ${dropFlash === "AUTO" ? "flash-auto" : ""}`}
-                onDragOver={(e) => e.preventDefault()}
-                onDrop={() => handleDrop("AUTO")}
-              >
-                <AutoShieldIcon />
-                <div className="drop-title">Auto Insurance</div>
-                <div className="drop-subtitle">Liability, collision, comprehensive, medical, driving protection, and auto extras.</div>
-                <div className="drop-count">Matched: {Object.values(placements).filter((p) => p === "AUTO").length}</div>
-              </div>
-            </div>
-          </div>
+        <div class="cert-grid" style="margin-top: 12px">
+          <div class="cert-mini"><div class="cert-mini-label">Certificate No.</div><div id="certMiniNo" class="cert-mini-value"></div></div>
+          <div class="cert-mini"><div class="cert-mini-label">Score</div><div id="certMiniScore" class="cert-mini-value"></div></div>
+          <div class="cert-mini"><div class="cert-mini-label">Take Number</div><div id="certMiniTake" class="cert-mini-value"></div></div>
+          <div class="cert-mini"><div class="cert-mini-label">Prepared By</div><div id="certMiniPrepared" class="cert-mini-value"></div></div>
         </div>
-
-        <div className="card section">
-          <div className="button-row">
-            <button className="btn btn-primary" onClick={() => submitExam(false)}>Submit Final Exam</button>
-            <button className="btn btn-secondary" onClick={randomizeAndReset}>Retake / Shuffle Exam</button>
-            {result?.passed && <button className="btn btn-success" onClick={() => downloadCertificatePDF(name, agency, result)}>Download Certificate Again</button>}
-          </div>
-          {message && <div className="message">{message}</div>}
+        <div class="cert-signs">
+          <div class="cert-line">Training Department</div>
+          <div class="cert-line">Authorized Signatory</div>
         </div>
+      </div>
+    </section>
 
-        {result && (
-          <div className="card section">
-            <div className={`result-badge ${result.passed ? "pass" : "fail"}`}>{result.passed ? "Passed" : "Needs Retake"}</div>
-            <h2 className="section-title" style={{ marginBottom: 10 }}>Exam Result</h2>
-            <p className="muted">{name} scored <strong>{result.percentage}%</strong> on the Insurance Personal Lines Final Exam.</p>
-            <div className="stats" style={{ marginTop: 18 }}>
-              <div className="stat-box"><div className="stat-label">Overall Score</div><div className="stat-value">{result.percentage}%</div></div>
-              <div className="stat-box"><div className="stat-label">Dropdown Score</div><div className="stat-value">{result.objectiveCorrect}/70</div></div>
-              <div className="stat-box"><div className="stat-label">Drag Score</div><div className="stat-value">{result.dragCorrect}/20</div></div>
-              <div className="stat-box"><div className="stat-label">Certificate No.</div><div className="stat-value" style={{ fontSize: 20 }}>{result.certificateNumber}</div></div>
-            </div>
-            <div className="button-row" style={{ marginTop: 16 }}>
-              <button className="btn btn-secondary" onClick={() => { playTap(); setShowReview((prev) => !prev); }}>
-                {showReview ? "Hide Review" : "Review Missed Answers"}
-              </button>
-            </div>
-
-            {showReview && (
-              <div className="review-grid" style={{ marginTop: 18 }}>
-                <div className="question-card">
-                  <h3 style={{ marginTop: 0 }}>Missed Dropdown Questions</h3>
-                  {result.missedQuestions.length === 0 ? (
-                    <div className="review-item">Perfect score in the dropdown section.</div>
-                  ) : (
-                    result.missedQuestions.map((item) => (
-                      <div key={item.id} className="review-item">
-                        <div className="question-no">Question {item.id}</div>
-                        <div>{item.question}</div>
-                        <div style={{ marginTop: 10, color: "#fca5a5" }}>Your answer: {answers[item.id] || "No answer"}</div>
-                        <div style={{ marginTop: 6, color: "#86efac" }}>Correct answer: {item.answer}</div>
-                      </div>
-                    ))
-                  )}
-                </div>
-
-                <div className="question-card">
-                  <h3 style={{ marginTop: 0 }}>Missed Drag Items</h3>
-                  {result.missedDrag.length === 0 ? (
-                    <div className="review-item">Perfect score in the drag-and-drop section.</div>
-                  ) : (
-                    result.missedDrag.map((item) => (
-                      <div key={item.id} className="review-item">
-                        <div className="question-no">Item {item.id}</div>
-                        <div>{item.label}</div>
-                        <div style={{ marginTop: 10, color: "#fca5a5" }}>Your placement: {placements[item.id] || "Not answered"}</div>
-                        <div style={{ marginTop: 6, color: "#86efac" }}>Correct placement: {item.answer}</div>
-                      </div>
-                    ))
-                  )}
-                </div>
-              </div>
-            )}
-          </div>
-        )}
-
-        {result?.passed && (
-          <div className="certificate">
-            <div className="certificate-inner">
-              <img
-                src="/lava-logo.png"
-                alt="LAVA Logo"
-                style={{ width: 90, height: 90, objectFit: "contain", marginBottom: 10 }}
-                onError={(e) => { e.currentTarget.style.display = "none"; }}
-              />
-              <div style={{ fontSize: 12, fontWeight: 800, letterSpacing: 3, textTransform: "uppercase", color: "#6b7280" }}>Certificate of Completion</div>
-              <div className="certificate-title">Insurance Personal Lines</div>
-              <div style={{ fontSize: 22, color: "#4b5563", marginBottom: 24 }}>Final Examination Pass Certificate</div>
-              <div style={{ fontSize: 12, fontWeight: 800, letterSpacing: 3, textTransform: "uppercase", color: "#6b7280" }}>This certifies that</div>
-              <div className="certificate-name">{name}</div>
-              <p style={{ maxWidth: 760, margin: "0 auto", fontSize: 18, lineHeight: 1.8, color: "#374151" }}>
-                has successfully passed the Insurance Personal Lines Final Exam with a score of <strong style={{ color: "#16a34a" }}>{result.percentage}%</strong> and reached the LAVA passing standard of <strong>{PASSING_SCORE}%</strong>.
-              </p>
-              <div className="stats" style={{ marginTop: 28 }}>
-                <div className="stat-box" style={{ background: "#f9fafb", borderColor: "#e5e7eb" }}><div className="stat-label" style={{ color: "#6b7280" }}>Trainee</div><div className="stat-value" style={{ color: "#111827", fontSize: 24 }}>{name}</div></div>
-                <div className="stat-box" style={{ background: "#f9fafb", borderColor: "#e5e7eb" }}><div className="stat-label" style={{ color: "#6b7280" }}>Agency</div><div className="stat-value" style={{ color: "#111827", fontSize: 24 }}>{agency || "LAVA Training Batch"}</div></div>
-                <div className="stat-box" style={{ background: "#f9fafb", borderColor: "#e5e7eb" }}><div className="stat-label" style={{ color: "#6b7280" }}>Date Issued</div><div className="stat-value" style={{ color: "#111827", fontSize: 24 }}>{result.date}</div></div>
-                <div className="stat-box" style={{ background: "#f9fafb", borderColor: "#e5e7eb" }}><div className="stat-label" style={{ color: "#6b7280" }}>Certificate No.</div><div className="stat-value" style={{ color: "#111827", fontSize: 20 }}>{result.certificateNumber}</div></div>
-              </div>
-              <div className="sign-row">
-                <div className="sign-line">Training Department</div>
-                <div className="sign-line">Authorized Signatory</div>
-              </div>
-            </div>
-          </div>
-        )}
+    <div id="adminModal" class="modal-backdrop hidden">
+      <div class="modal-card">
+        <div class="badge" style="margin-bottom:14px">Admin Secure Access</div>
+        <h3 style="margin-bottom:8px">Enter Admin Password</h3>
+        <p class="muted" style="margin-bottom:14px">Only admin can view the detailed result, correct answers, and certificate.</p>
+        <div class="field">
+          <label for="adminPasswordInput">Admin Password</label>
+          <input id="adminPasswordInput" type="password" placeholder="Enter admin password" />
+        </div>
+        <div id="adminError" class="message hidden" style="margin-top:0; background: rgba(239,68,68,.12); border-color: rgba(239,68,68,.25); color:#fecaca;"></div>
+        <div class="actions">
+          <button id="adminUnlockBtn" class="btn btn-primary">Unlock Admin Review</button>
+          <button id="adminCancelBtn" class="btn btn-secondary">Cancel</button>
+        </div>
       </div>
     </div>
-  );
-}
+  </div>
+
+  <script>
+    const LOGO_B64 = 'iVBORw0KGgoAAAANSUhEUgAAAOEAAADhCAMAAAAJbSJIAAAAnFBMVEXnODXx8fHnMS7y9/by9PHx+Pfx9PTnNTTnMTDz9vfv8vHmKyfrhoLnNTLx5+fpcW/nSkfpa2vqd3Xtqqjuvb3rgn/pcnDv2NjmLSrtpqXpenrpaGfv0tLoZ2Hx7/HmTUrrjIvmPDrvy8vmVlDmWVnmPzvsn57mJibjAADw19foY2PvzMznQj/yyMjrj4/nRUPuubngAAD0zs7vb2/w3Nzrhn7oY13uubrnODbcAADrj4/vtLTkAADrjY3uurrtqajnNS3nODfRO+qkAAAFlElEQVR4nO2di3aiMBCGk+YmmLS0xr7/t2xDlAQMULNqvzm/S9JKIoaZ3pkbQAL4cDgcDofD4XA4HA6Hw+FwuP8r9SAhs8QYw5X6X7KaP0CV2r2+HiCRLw9VGF7mqWp6NRvSEI2NwOvcxBMaN1b2SVjbRkBiv9a1x4fs+O1YSwmhMTkhFH99t02R2Ij+Qnk6GH0quEaJQqvx4XXj8gSfKz6kBRD7kQexceNTSqbR0Rs0XFn1sfEJYEIMZEXpJsa30+eKEy3q3CGm5wziVbb+YF7kS62xv9CNvC44x+jrA1bNQHav71pSAhIix0JjA7wnJaQMWrQWcTu4J0W0wltCrLNsGHVM6vUSsnbjAXkhN8F/hCxzwW5wexT2ZLzzIhYd+OC2m8H5V2VH1lDLOtRu0KYHm3M0grjBmxqHyR0ErIv0uXqcOH0aJFPkF+CZ2uKU2uJdNqWzF0WlVPG+DgG6Zh4ka+qzSXg4D+wbBSmk3J+gfYKd7y7AJDq2ehNybXlA49uNpBvupP+D/ITttmkvv2Lh0zcB+7ODiEjYrVM9Dy9LCi/ywM3lfBjlwmxkfTmWW9AVsK+Q/tDmSXU0XHYowB7CE5UQYqfup9rGCfCnZVVzkl4D5Q3T4VjDNQXz6XjBXQDxWsVyibRp2H7LuYt+sDG3bh2k3T7mSBWxVuyZnWheMI1O0Dg5h6GibK1sBGRf1ScCbuQ9r1g0MdVqHHv9aRUQBuDkzdkpFAz0ppTivYyQprwXkeAYu1of37R6WcOfXk76gFjN0aMJKMKn7q/auyH3h0hO+qj+s/LWQ53OQYtaac+4e4C+Lb5sZ8YJfhz1WUm2BWMh55NLF0tb3Ujv2Bxbph1UXhF4hfJt7oTvNK8EMZqPjH+qJ1WnqI+ZW5jXUd5cfk11p7Lh0F8UFt5ve+OXV9mGcIG7dC16lQxrjH6Zd7k3pvP9A7jKZcw7Wm0t2p90uSOM1Ku0Lr1lrrt2lYWrP1NoTjiPq9I+X2+muGJp9gUtD+rmdtQuveCwVmr4n9n1v6dDZGi3FZSeL1yF1/jNOm0YtR4O6bRZ1P3w4HA6Hw+FwOBwOh8PhcDgczsP8BR8rxm5FxqR7AAAAAElFTkSuQmCC';
+    const LOGO_SRC = 'data:image/png;base64,' + LOGO_B64;
+    document.getElementById('logoExam').src = LOGO_SRC;
+    document.getElementById('logoCert').src = LOGO_SRC;
+    const favicon = document.createElement('link');
+    favicon.rel = 'icon';
+    favicon.href = LOGO_SRC;
+    document.head.appendChild(favicon);
+
+    const PASSING_SCORE = 90;
+    const EXAM_DURATION = 30 * 60;
+    const MAX_TAKES = 3;
+    const ADMIN_PASSWORD = 'LAVAADMIN123'; // Change this password for admin-only review
+
+    const OBJECTIVE_QUESTIONS = [
+      { id: 1, question: 'What is the main purpose of insurance?', answer: 'To transfer risk from an individual to an insurance company', type: 'mcq' },
+      { id: 2, question: 'What responsibility does an insurance underwriter have?', answer: 'To assess risks and determine policy terms', type: 'mcq' },
+      { id: 3, question: 'In a policy, what is the deductible?', answer: 'The amount the insured pays out of pocket before the insurer pays', type: 'mcq' },
+      { id: 4, question: 'Which type of insurance provides coverage for vehicles?', answer: 'Auto Insurance', type: 'mcq' },
+      { id: 5, question: 'What is a premium in insurance?', answer: 'The cost of the insurance policy', type: 'mcq' },
+      { id: 6, question: 'What is the purpose of a Certificate of Insurance (COI)?', answer: 'To summarize business insurance coverages and effective dates', type: 'mcq' },
+      { id: 7, question: 'Which of the following is NOT typically covered by a standard homeowners policy?', answer: 'Flood damage', type: 'mcq' },
+      { id: 8, question: 'What is an insurance policy limit?', answer: 'The maximum amount the insurer will pay for a covered loss', type: 'mcq' },
+      { id: 9, question: 'What is a claim?', answer: 'A request for coverage due to a loss', type: 'mcq' },
+      { id: 10, question: 'What does underinsured mean?', answer: 'Insufficient insurance coverage', type: 'mcq' },
+      { id: 11, question: 'What is the purpose of an endorsement?', answer: 'To add or change coverages', type: 'mcq' },
+      { id: 12, question: 'What does ACV stand for?', answer: 'Actual Cash Value', type: 'mcq' },
+      { id: 13, question: 'What are the three main sections of an Auto policy?', answer: 'Bodily Injury, Property Damage, Medical Coverage', type: 'mcq' },
+      { id: 14, question: 'What does AMS stand for?', answer: 'Agency Management System', type: 'mcq' },
+      { id: 15, question: 'What does an Umbrella policy provide?', answer: 'Excess liability coverage beyond other policies', type: 'mcq' },
+      { id: 16, question: 'What is Gap Insurance?', answer: 'Covers remaining loan balance after a total loss', type: 'mcq' },
+      { id: 17, question: 'What does NFIP stand for?', answer: 'National Flood Insurance Program', type: 'mcq' },
+      { id: 18, question: 'Which homeowners policy offers the broadest coverage?', answer: 'HO5', type: 'mcq' },
+      { id: 19, question: 'Glass coverage is most commonly associated with which policy?', answer: 'Auto Policy', type: 'mcq' },
+      { id: 20, question: 'Which policy protects professionals against negligence claims?', answer: 'E&O', type: 'mcq' },
+      { id: 21, question: 'What is required when quoting an Auto policy?', answer: 'Drivers, VINs, and requested limits', type: 'mcq' },
+      { id: 22, question: 'What is an ACORD form?', answer: 'Standard insurance application and endorsement form', type: 'mcq' },
+      { id: 23, question: 'What is a BOP?', answer: 'Packaged commercial insurance policy', type: 'mcq' },
+      { id: 24, question: 'What does CLUE reference?', answer: 'Claims history report before binding', type: 'mcq' },
+      { id: 25, question: 'What is a fiduciary?', answer: 'Someone obligated to act in another\'s best interest', type: 'mcq' },
+      { id: 26, question: 'The person or party who owns an individual insurance policy is known as what?', answer: 'Policy Owner', type: 'mcq' },
+      { id: 27, question: 'A person who makes an insurance claim is known as', answer: 'Claimant', type: 'mcq' },
+      { id: 28, question: 'What happens when an insured doesn\'t make a payment', answer: 'The policy will be cancelled', type: 'mcq' },
+      { id: 29, question: 'A Non-Renewal refers to what?', answer: 'Carrier no longer offering coverage', type: 'mcq' },
+      { id: 30, question: 'What is the document called that lists the coverages of a policy?', answer: 'Declarations Page', type: 'mcq' },
+      { id: 31, question: 'An insurance policy is a legal contract between the insured and the insurer.', answer: 'TRUE', type: 'tf' },
+      { id: 32, question: 'Insurance fraud is illegal and can result in criminal charges.', answer: 'TRUE', type: 'tf' },
+      { id: 33, question: 'All Auto policies cover flood damage.', answer: 'FALSE', type: 'tf' },
+      { id: 34, question: 'Collision coverage will pay for the insured\'s vehicle to be fixed.', answer: 'TRUE', type: 'tf' },
+      { id: 35, question: 'All states require the same level of auto insurance.', answer: 'FALSE', type: 'tf' },
+      { id: 36, question: 'Homeowners insurance covers fire, hurricane, hail, and lightning.', answer: 'TRUE', type: 'tf' },
+      { id: 37, question: 'Policies refer to loss events as perils.', answer: 'TRUE', type: 'tf' },
+      { id: 38, question: 'Homeowners insurance covers land value.', answer: 'FALSE', type: 'tf' },
+      { id: 39, question: 'Renters are required to have homeowners insurance.', answer: 'FALSE', type: 'tf' },
+      { id: 40, question: 'Homeowners insurance pays for remodel upgrades.', answer: 'FALSE', type: 'tf' },
+      { id: 41, question: 'Everyone pays the same premium for homeowners insurance.', answer: 'FALSE', type: 'tf' },
+      { id: 42, question: 'Flood insurance is required for every homeowner.', answer: 'FALSE', type: 'tf' },
+      { id: 43, question: 'Some carriers offer good student discounts.', answer: 'TRUE', type: 'tf' },
+      { id: 44, question: 'Collision coverage protects against theft.', answer: 'FALSE', type: 'tf' },
+      { id: 45, question: 'Higher deductibles reduce premiums.', answer: 'TRUE', type: 'tf' },
+      { id: 46, question: 'Condo insurance is also called HO6.', answer: 'TRUE', type: 'tf' },
+      { id: 47, question: 'Deductibles in insurance policies are the maximum amount of money the insured has to pay out of pocket before the insurance company starts to pay for covered expenses.', answer: 'FALSE', type: 'tf' },
+      { id: 48, question: 'Insurance policies are legally binding contracts.', answer: 'TRUE', type: 'tf' },
+      { id: 49, question: 'A policyholder may cancel anytime.', answer: 'TRUE', type: 'tf' },
+      { id: 50, question: 'Insurance companies are unregulated.', answer: 'FALSE', type: 'tf' },
+      { id: 51, question: 'Carriers give 90 days for missed payments.', answer: 'FALSE', type: 'tf' },
+      { id: 52, question: 'LPR is the ACORD cancellation form.', answer: 'TRUE', type: 'tf' },
+      { id: 53, question: 'Comprehensive coverage applies to non-collision losses.', answer: 'TRUE', type: 'tf' },
+      { id: 54, question: 'Remarketing a policy means selling it to another agency.', answer: 'FALSE', type: 'tf' },
+      { id: 55, question: 'A person who sells insurance policies is called an adjuster.', answer: 'FALSE', type: 'tf' },
+      { id: 56, question: 'Cyber Liability insurance provides coverage for data breaches and cyber threats.', answer: 'TRUE', type: 'tf' },
+      { id: 57, question: 'A quote is an offer for insurance coverage based on known information provided at the time.', answer: 'TRUE', type: 'tf' },
+      { id: 58, question: 'The deductible is the amount the insurance company pays before the insured contributes to a loss.', answer: 'FALSE', type: 'tf' },
+      { id: 59, question: 'E&S stands for Excess and Surplus lines insurance.', answer: 'TRUE', type: 'tf' },
+      { id: 60, question: 'The person or party responsible for an accident is referred to as the claimant.', answer: 'FALSE', type: 'tf' },
+      { id: 61, question: 'A commercial client insured through an independent agency experiences three liability claims in two years. At renewal, their current carrier non-renews due to loss frequency. What is the most appropriate next step?', answer: 'Explore surplus lines or non-admitted markets while fully disclosing coverage differences', type: 'scenario' },
+      { id: 62, question: 'An unlicensed VA gathers renewal information and learns the insured started a catering business from home. What is the most compliant course of action?', answer: 'Immediately refer the matter to a licensed agent for coverage evaluation', type: 'scenario' },
+      { id: 63, question: 'The insured rejects higher liability limits and later has a catastrophic loss. What is most critical to the agency\'s defense?', answer: 'Whether the insured signed a documented coverage rejection or selection form', type: 'scenario' },
+      { id: 64, question: 'A captive agent loses a client because the carrier exits the state. What constraint most likely applies?', answer: 'The agent may be contractually prohibited from placing business outside the represented carrier', type: 'scenario' },
+      { id: 65, question: 'An agency deposits client premium payments into its operating account before remitting to carriers. What is the primary regulatory concern?', answer: 'Violation of fiduciary duty regarding premium trust handling', type: 'scenario' },
+      { id: 66, question: 'Which activity would generally require an insurance license?', answer: 'Explaining coverage differences and recommending one', type: 'scenario' },
+      { id: 67, question: 'Which task may be performed by an unlicensed VA without violating insurance regulations?', answer: 'Collecting underwriting information using a pre-approved questionnaire', type: 'scenario' },
+      { id: 68, question: 'Which underwriting factor would most significantly affect auto liability rates?', answer: 'Driver\'s prior violation history', type: 'scenario' },
+      { id: 69, question: 'What is the primary purpose of a binder in insurance?', answer: 'To provide temporary evidence of coverage pending formal policy issuance', type: 'scenario' },
+      { id: 70, question: 'Which situation would most likely require a policy endorsement rather than issuance of a new policy?', answer: 'The insured adds an additional insured to an existing in-force commercial policy', type: 'scenario' }
+    ];
+
+    const DRAG_ITEMS = [
+      { id: 71, label: 'Dwelling Coverage', answer: 'HOME' },
+      { id: 72, label: 'Other Structures', answer: 'HOME' },
+      { id: 73, label: 'Personal Property', answer: 'HOME' },
+      { id: 74, label: 'Loss of Use', answer: 'HOME' },
+      { id: 75, label: 'Personal Liability', answer: 'HOME' },
+      { id: 76, label: 'Medical Payments to Others', answer: 'HOME' },
+      { id: 77, label: 'Ordinance or Law', answer: 'HOME' },
+      { id: 78, label: 'Earthquake Endorsement', answer: 'HOME' },
+      { id: 79, label: 'Flood Endorsement', answer: 'HOME' },
+      { id: 80, label: 'Scheduled Personal Property', answer: 'HOME' },
+      { id: 81, label: 'Liability (BI/PD)', answer: 'AUTO' },
+      { id: 82, label: 'Collision Coverage', answer: 'AUTO' },
+      { id: 83, label: 'Comprehensive Coverage', answer: 'AUTO' },
+      { id: 84, label: 'Uninsured Motorist', answer: 'AUTO' },
+      { id: 85, label: 'Underinsured Motorist', answer: 'AUTO' },
+      { id: 86, label: 'Medical Payments (MedPay)', answer: 'AUTO' },
+      { id: 87, label: 'Personal Injury Protection (PIP)', answer: 'AUTO' },
+      { id: 88, label: 'Rental Reimbursement', answer: 'AUTO' },
+      { id: 89, label: 'Towing & Labor', answer: 'AUTO' },
+      { id: 90, label: 'Gap Insurance', answer: 'AUTO' }
+    ];
+
+    const answerPool = [...new Set(OBJECTIVE_QUESTIONS.filter(q => q.type !== 'tf').map(q => q.answer))];
+
+    const el = {
+      candidateName: document.getElementById('candidateName'),
+      agencyName: document.getElementById('agencyName'),
+      trainerName: document.getElementById('trainerName'),
+      attemptsUsed: document.getElementById('attemptsUsed'),
+      currentTake: document.getElementById('currentTake'),
+      timerValue: document.getElementById('timerValue'),
+      shuffleBtn: document.getElementById('shuffleBtn'),
+      startBtn: document.getElementById('startBtn'),
+      resetBtn: document.getElementById('resetBtn'),
+      submitBtn: document.getElementById('submitBtn'),
+      adminAccessBtn: document.getElementById('adminAccessBtn'),
+      nextTakeBtn: document.getElementById('nextTakeBtn'),
+      downloadCertificateBtn: document.getElementById('downloadCertificateBtn'),
+      adminModal: document.getElementById('adminModal'),
+      adminPasswordInput: document.getElementById('adminPasswordInput'),
+      adminUnlockBtn: document.getElementById('adminUnlockBtn'),
+      adminCancelBtn: document.getElementById('adminCancelBtn'),
+      adminError: document.getElementById('adminError'),
+      questionsContainer: document.getElementById('questionsContainer'),
+      progressText: document.getElementById('progressText'),
+      totalItems: document.getElementById('totalItems'),
+      progressFill: document.getElementById('progressFill'),
+      progressPct: document.getElementById('progressPct'),
+      messageBox: document.getElementById('messageBox'),
+      dragProgress: document.getElementById('dragProgress'),
+      dragItemWrap: document.getElementById('dragItemWrap'),
+      placeHomeBtn: document.getElementById('placeHomeBtn'),
+      placeAutoBtn: document.getElementById('placeAutoBtn'),
+      homeZone: document.getElementById('homeZone'),
+      autoZone: document.getElementById('autoZone'),
+      homeCount: document.getElementById('homeCount'),
+      autoCount: document.getElementById('autoCount'),
+      resultCard: document.getElementById('resultCard'),
+      certificateCard: document.getElementById('certificateCard'),
+      certName: document.getElementById('certName'),
+      certBody: document.getElementById('certBody'),
+      certMiniName: document.getElementById('certMiniName'),
+      certMiniAgency: document.getElementById('certMiniAgency'),
+      certMiniTrainer: document.getElementById('certMiniTrainer'),
+      certMiniDate: document.getElementById('certMiniDate'),
+      certMiniNo: document.getElementById('certMiniNo'),
+      certMiniScore: document.getElementById('certMiniScore'),
+      certMiniTake: document.getElementById('certMiniTake'),
+      certMiniPrepared: document.getElementById('certMiniPrepared')
+    };
+
+    const state = {
+      questions: [],
+      answers: {},
+      dragPlacements: {},
+      started: false,
+      currentTake: 0,
+      timerId: null,
+      secondsLeft: EXAM_DURATION,
+      result: null,
+      autoDownloaded: false,
+      adminUnlocked: false
+    };
+
+    function shuffle(arr) {
+      const copy = [...arr];
+      for (let i = copy.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [copy[i], copy[j]] = [copy[j], copy[i]];
+      }
+      return copy;
+    }
+
+    function buildOptions(question) {
+      if (question.type === 'tf') return ['TRUE', 'FALSE'];
+      const distractors = shuffle(answerPool.filter(a => a !== question.answer)).slice(0, 3);
+      return shuffle([question.answer, ...distractors]);
+    }
+
+    function formatTime(total) {
+      const m = Math.floor(total / 60);
+      const s = total % 60;
+      return String(m).padStart(2, '0') + ':' + String(s).padStart(2, '0');
+    }
+
+    function normalizedName(name) {
+      return name.trim().toLowerCase();
+    }
+
+    function getAttemptsForName(name) {
+      const key = 'lava_exam_attempts_' + normalizedName(name);
+      return Number(localStorage.getItem(key) || 0);
+    }
+
+    function setAttemptsForName(name, value) {
+      const key = 'lava_exam_attempts_' + normalizedName(name);
+      localStorage.setItem(key, String(value));
+    }
+
+    function showMessage(text) {
+      el.messageBox.textContent = text;
+      el.messageBox.classList.remove('hidden');
+    }
+
+    function hideMessage() {
+      el.messageBox.textContent = '';
+      el.messageBox.classList.add('hidden');
+    }
+
+    function updateAttemptsUI() {
+      const name = el.candidateName.value.trim();
+      const attempts = name ? getAttemptsForName(name) : 0;
+      el.attemptsUsed.textContent = attempts;
+      el.currentTake.textContent = state.currentTake ? state.currentTake : '-';
+    }
+
+    function buildExam() {
+      state.questions = shuffle(OBJECTIVE_QUESTIONS).map(q => ({ ...q, options: buildOptions(q) }));
+      state.answers = {};
+      state.dragPlacements = {};
+      state.result = null;
+      state.autoDownloaded = false;
+      state.adminUnlocked = false;
+      renderQuestions();
+      renderDrag();
+      renderProgress();
+      renderResult();
+      renderCertificate(null);
+      closeAdminModal();
+      hideMessage();
+      updateButtons();
+    }
+
+    function renderQuestions() {
+      el.questionsContainer.innerHTML = '';
+      state.questions.forEach((q, index) => {
+        const wrap = document.createElement('div');
+        wrap.className = 'question-card';
+        const num = document.createElement('div');
+        num.className = 'question-number';
+        num.textContent = 'Question ' + (index + 1);
+        const p = document.createElement('p');
+        p.textContent = q.question;
+        const sel = document.createElement('select');
+        sel.disabled = !state.started || !!state.result;
+        sel.innerHTML = '<option value="">Select your answer</option>' + q.options.map(opt => `<option value="${escapeHtml(opt)}">${escapeHtml(opt)}</option>`).join('');
+        sel.value = state.answers[q.id] || '';
+        sel.addEventListener('change', (e) => {
+          state.answers[q.id] = e.target.value;
+          renderProgress();
+        });
+        wrap.appendChild(num);
+        wrap.appendChild(p);
+        wrap.appendChild(sel);
+        el.questionsContainer.appendChild(wrap);
+      });
+      el.totalItems.textContent = String(state.questions.length + DRAG_ITEMS.length);
+    }
+
+    function currentDragItem() {
+      return DRAG_ITEMS.find(item => !state.dragPlacements[item.id]) || null;
+    }
+
+    function renderDrag() {
+      const current = currentDragItem();
+      el.dragProgress.textContent = `Progress: ${Object.keys(state.dragPlacements).length} / ${DRAG_ITEMS.length}`;
+      el.homeCount.textContent = `Matched: ${Object.values(state.dragPlacements).filter(v => v === 'HOME').length}`;
+      el.autoCount.textContent = `Matched: ${Object.values(state.dragPlacements).filter(v => v === 'AUTO').length}`;
+      el.dragItemWrap.innerHTML = '';
+
+      if (!current) {
+        const done = document.createElement('div');
+        done.className = 'question-card';
+        done.innerHTML = '<h3 style="margin-top:0">All drag items completed</h3><p class="muted" style="margin-bottom:0">Great job! You completed the matching section.</p>';
+        el.dragItemWrap.appendChild(done);
+        el.placeHomeBtn.disabled = true;
+        el.placeAutoBtn.disabled = true;
+        return;
+      }
+
+      const drag = document.createElement('div');
+      drag.className = 'drag-card';
+      drag.textContent = current.label;
+      drag.setAttribute('draggable', state.started && !state.result ? 'true' : 'false');
+      if (!state.started || state.result) drag.style.opacity = '.65';
+      drag.addEventListener('dragstart', (e) => {
+        if (!state.started || state.result) {
+          e.preventDefault();
+          return;
+        }
+        e.dataTransfer.setData('text/plain', String(current.id));
+        activateZones(true);
+      });
+      drag.addEventListener('dragend', () => activateZones(false));
+      el.dragItemWrap.appendChild(drag);
+      el.placeHomeBtn.disabled = !state.started || !!state.result;
+      el.placeAutoBtn.disabled = !state.started || !!state.result;
+    }
+
+    function renderProgress() {
+      const done = Object.keys(state.answers).length + Object.keys(state.dragPlacements).length;
+      const total = state.questions.length + DRAG_ITEMS.length;
+      const pct = total ? Math.round((done / total) * 100) : 0;
+      el.progressText.textContent = String(done);
+      el.totalItems.textContent = String(total);
+      el.progressFill.style.width = pct + '%';
+      el.progressPct.textContent = pct + '%';
+    }
+
+    function renderResult() {
+      if (!state.result || !state.adminUnlocked) {
+        el.resultCard.classList.add('hidden');
+        el.resultCard.innerHTML = '';
+        return;
+      }
+      const r = state.result;
+      const badge = `<div class="result-badge ${r.passed ? 'result-pass' : 'result-fail'}">${r.passed ? 'Passed' : 'Needs Retake'}</div>`;
+      const reviewHtml = !r.passed ? `
+        <div class="review-grid" style="margin-top:18px">
+          <div class="question-card">
+            <h3>Missed Dropdown Questions</h3>
+            ${r.missedQuestions.length ? r.missedQuestions.map(item => `
+              <div class="review-item">
+                <div class="question-number">Question ${item.displayNumber}</div>
+                <div>${escapeHtml(item.question)}</div>
+                <div style="margin-top:8px; color:#fca5a5">Your answer: ${escapeHtml(item.userAnswer || 'No answer')}</div>
+                <div style="margin-top:6px; color:#86efac">Correct answer: ${escapeHtml(item.answer)}</div>
+              </div>`).join('') : '<div class="review-item">Perfect score in the dropdown section.</div>'}
+          </div>
+          <div class="question-card">
+            <h3>Missed Drag Items</h3>
+            ${r.missedDrag.length ? r.missedDrag.map(item => `
+              <div class="review-item">
+                <div class="question-number">Item ${item.displayNumber}</div>
+                <div>${escapeHtml(item.label)}</div>
+                <div style="margin-top:8px; color:#fca5a5">Your placement: ${escapeHtml(item.userPlacement || 'Not answered')}</div>
+                <div style="margin-top:6px; color:#86efac">Correct placement: ${escapeHtml(item.answer)}</div>
+              </div>`).join('') : '<div class="review-item">Perfect score in the drag-and-drop section.</div>'}
+          </div>
+        </div>` : '';
+
+      const answerKeyHtml = `
+        <div class="answer-key-grid">
+          <div class="question-card">
+            <h3>Full Question Answer Key</h3>
+            ${r.allQuestions.map(item => `
+              <div class="review-item">
+                <div class="question-number">Question ${item.displayNumber}</div>
+                <div>${escapeHtml(item.question)}</div>
+                <div style="margin-top:8px">Your answer: <span class="${item.userAnswer === item.answer ? 'status-correct' : 'status-wrong'}">${escapeHtml(item.userAnswer || 'No answer')}</span></div>
+                <div style="margin-top:6px; color:#86efac">Correct answer: ${escapeHtml(item.answer)}</div>
+              </div>`).join('')}
+          </div>
+          <div class="question-card">
+            <h3>Full Drag-and-Drop Answer Key</h3>
+            ${r.allDrag.map(item => `
+              <div class="review-item">
+                <div class="question-number">Item ${item.displayNumber}</div>
+                <div>${escapeHtml(item.label)}</div>
+                <div style="margin-top:8px">Your placement: <span class="${item.userPlacement === item.answer ? 'status-correct' : 'status-wrong'}">${escapeHtml(item.userPlacement || 'Not answered')}</span></div>
+                <div style="margin-top:6px; color:#86efac">Correct placement: ${escapeHtml(item.answer)}</div>
+              </div>`).join('')}
+          </div>
+        </div>`;
+
+      el.resultCard.innerHTML = `
+        ${badge}
+        <h2>Exam Result</h2>
+        <p class="muted">${escapeHtml(r.name)} scored <strong>${r.percentage}%</strong> on the Insurance Personal Lines Final Exam.</p>
+        <div class="stats-grid" style="margin-top:16px">
+          <div class="mini-card"><div class="mini-label">Overall Score</div><div class="mini-value">${r.percentage}%</div></div>
+          <div class="mini-card"><div class="mini-label">Dropdown Score</div><div class="mini-value">${r.objectiveCorrect}/70</div></div>
+          <div class="mini-card"><div class="mini-label">Drag Score</div><div class="mini-value">${r.dragCorrect}/20</div></div>
+          <div class="mini-card"><div class="mini-label">Take Number</div><div class="mini-value">${r.takeNumber}</div></div>
+        </div>
+        ${reviewHtml}
+        ${answerKeyHtml}
+      `;
+      el.resultCard.classList.remove('hidden');
+    }
+
+    function renderCertificate(r) {
+      if (!r || !r.passed || !state.adminUnlocked) {
+        el.certificateCard.classList.add('hidden');
+        return;
+      }
+      el.certName.textContent = r.name;
+      el.certBody.innerHTML = `has successfully passed the Insurance Personal Lines Final Exam with a score of <strong style="color:#16a34a">${r.percentage}%</strong>. This examination was prepared by <strong>${escapeHtml(r.trainer)}</strong>.`;
+      el.certMiniName.textContent = r.name;
+      el.certMiniAgency.textContent = r.agency || 'LAVA Training Batch';
+      el.certMiniTrainer.textContent = r.trainer;
+      el.certMiniDate.textContent = r.date;
+      el.certMiniNo.textContent = r.certificateNumber;
+      el.certMiniScore.textContent = r.percentage + '%';
+      el.certMiniTake.textContent = String(r.takeNumber);
+      el.certMiniPrepared.textContent = r.trainer;
+      el.certificateCard.classList.remove('hidden');
+    }
+
+    function updateButtons() {
+      const name = el.candidateName.value.trim();
+      const attempts = name ? getAttemptsForName(name) : 0;
+      const locked = attempts >= MAX_TAKES;
+      el.shuffleBtn.disabled = state.started;
+      el.startBtn.disabled = state.started || !!state.result || locked;
+      el.resetBtn.disabled = false;
+      el.submitBtn.disabled = !state.started || !!state.result;
+      el.adminAccessBtn.classList.toggle('hidden', !state.result);
+      el.nextTakeBtn.classList.toggle('hidden', !(state.result && !state.result.passed && attempts < MAX_TAKES));
+      el.downloadCertificateBtn.classList.toggle('hidden', !(state.result && state.result.passed && state.adminUnlocked));
+      if (locked && !state.started && !state.result && name) {
+        showMessage('This trainee has already used all 3 allowed takes for this browser.');
+      }
+    }
+
+    function startTimer() {
+      clearTimer();
+      state.secondsLeft = EXAM_DURATION;
+      updateTimer();
+      state.timerId = setInterval(() => {
+        state.secondsLeft -= 1;
+        updateTimer();
+        if (state.secondsLeft <= 0) {
+          clearTimer();
+          submitExam(true);
+        }
+      }, 1000);
+    }
+
+    function clearTimer() {
+      if (state.timerId) {
+        clearInterval(state.timerId);
+        state.timerId = null;
+      }
+    }
+
+    function updateTimer() {
+      el.timerValue.textContent = formatTime(Math.max(0, state.secondsLeft));
+      el.timerValue.classList.toggle('timer-warning', state.secondsLeft <= 300);
+    }
+
+    function startExam() {
+      const name = el.candidateName.value.trim();
+      if (!name) {
+        showMessage('Please enter the trainee name first.');
+        return;
+      }
+      const attempts = getAttemptsForName(name);
+      if (attempts >= MAX_TAKES) {
+        updateAttemptsUI();
+        showMessage('This trainee already used all 3 allowed takes for this browser.');
+        return;
+      }
+      const nextTake = attempts + 1;
+      setAttemptsForName(name, nextTake);
+      state.currentTake = nextTake;
+      state.started = true;
+      state.result = null;
+      renderQuestions();
+      renderDrag();
+      renderResult();
+      renderCertificate(null);
+      updateAttemptsUI();
+      updateButtons();
+      startTimer();
+      showMessage(`Take ${nextTake} started. Remaining attempts after this take: ${MAX_TAKES - nextTake}.`);
+    }
+
+    function resetCurrentForm(newShuffle = false) {
+      clearTimer();
+      state.started = false;
+      state.currentTake = 0;
+      state.secondsLeft = EXAM_DURATION;
+      updateTimer();
+      if (newShuffle) {
+        buildExam();
+      } else {
+        state.answers = {};
+        state.dragPlacements = {};
+        state.result = null;
+        state.autoDownloaded = false;
+        state.adminUnlocked = false;
+        renderQuestions();
+        renderDrag();
+        renderProgress();
+        renderResult();
+        renderCertificate(null);
+        hideMessage();
+        updateButtons();
+      }
+      updateAttemptsUI();
+    }
+
+    function activateZones(active) {
+      el.homeZone.classList.toggle('active', active);
+      el.autoZone.classList.toggle('active', active);
+    }
+
+    function placeCurrentItem(target) {
+      if (!state.started || state.result) return;
+      const item = currentDragItem();
+      if (!item) return;
+      state.dragPlacements[item.id] = target;
+      renderDrag();
+      renderProgress();
+      flashZone(target);
+    }
+
+    function flashZone(target) {
+      const zone = target === 'HOME' ? el.homeZone : el.autoZone;
+      zone.classList.add(target === 'HOME' ? 'flash-home' : 'flash-auto');
+      setTimeout(() => zone.classList.remove('flash-home', 'flash-auto'), 350);
+    }
+
+    function makeCertificateNumber() {
+      return 'LAVA-IPL-' + Date.now().toString().slice(-8);
+    }
+
+    function submitExam(isAuto = false) {
+      if (!state.started) {
+        showMessage('Please start the exam first.');
+        return;
+      }
+      const missingQuestions = state.questions.filter(q => !state.answers[q.id]).length;
+      const missingDrag = DRAG_ITEMS.filter(item => !state.dragPlacements[item.id]).length;
+      if (!isAuto && (missingQuestions > 0 || missingDrag > 0)) {
+        showMessage(`Please finish all items first. Remaining: ${missingQuestions} question(s) and ${missingDrag} drag item(s).`);
+        return;
+      }
+
+      clearTimer();
+      state.started = false;
+
+      const objectiveCorrect = state.questions.filter(q => state.answers[q.id] === q.answer).length;
+      const dragCorrect = DRAG_ITEMS.filter(item => state.dragPlacements[item.id] === item.answer).length;
+      const totalCorrect = objectiveCorrect + dragCorrect;
+      const totalItems = state.questions.length + DRAG_ITEMS.length;
+      const percentage = Math.round((totalCorrect / totalItems) * 100);
+      const passed = percentage >= PASSING_SCORE;
+      const name = el.candidateName.value.trim();
+      const agency = el.agencyName.value.trim();
+      const trainer = el.trainerName.value.trim() || 'LAVA Training Department';
+
+      const allQuestions = state.questions
+        .map((q, idx) => ({ ...q, displayNumber: idx + 1, userAnswer: state.answers[q.id] || '' }));
+      const missedQuestions = allQuestions.filter(q => q.userAnswer !== q.answer);
+      const allDrag = DRAG_ITEMS
+        .map((item, idx) => ({ ...item, displayNumber: idx + 1, userPlacement: state.dragPlacements[item.id] || '' }));
+      const missedDrag = allDrag.filter(item => item.userPlacement !== item.answer);
+
+      state.result = {
+        name,
+        agency,
+        trainer,
+        percentage,
+        passed,
+        objectiveCorrect,
+        dragCorrect,
+        takeNumber: state.currentTake,
+        date: new Date().toLocaleDateString(),
+        certificateNumber: makeCertificateNumber(),
+        missedQuestions,
+        missedDrag,
+        allQuestions,
+        allDrag
+      };
+      state.adminUnlocked = false;
+
+      renderQuestions();
+      renderDrag();
+      renderProgress();
+      renderResult();
+      renderCertificate(state.result);
+      updateButtons();
+      updateAttemptsUI();
+
+      const attempts = getAttemptsForName(name);
+      const remaining = Math.max(0, MAX_TAKES - attempts);
+      showMessage((isAuto ? 'Time is up. The exam was auto-submitted.\n' : '') + `Exam submitted successfully. Admin password is required to view the result, correct answers, and certificate. Remaining take(s): ${remaining}.`);
+    }
+
+    function downloadCertificate(result) {
+      if (!result) return;
+      try {
+        const { jsPDF } = window.jspdf;
+        const doc = new jsPDF({ orientation: 'landscape', unit: 'pt', format: 'a4' });
+        const w = doc.internal.pageSize.getWidth();
+        const h = doc.internal.pageSize.getHeight();
+
+        doc.setFillColor(255, 247, 237);
+        doc.rect(18, 18, w - 36, h - 36, 'F');
+        doc.setDrawColor(245, 158, 11);
+        doc.setLineWidth(6);
+        doc.rect(24, 24, w - 48, h - 48);
+        doc.setDrawColor(75, 85, 99);
+        doc.setLineWidth(1.5);
+        doc.rect(42, 42, w - 84, h - 84);
+
+        doc.addImage(LOGO_SRC, 'PNG', (w / 2) - 36, 48, 72, 72);
+        doc.setFont('helvetica', 'bold');
+        doc.setTextColor(107, 114, 128);
+        doc.setFontSize(13);
+        doc.text('CERTIFICATE OF COMPLETION', w / 2, 144, { align: 'center' });
+
+        doc.setTextColor(17, 24, 39);
+        doc.setFontSize(30);
+        doc.text('Insurance Personal Lines', w / 2, 192, { align: 'center' });
+
+        doc.setFont('helvetica', 'normal');
+        doc.setTextColor(75, 85, 99);
+        doc.setFontSize(17);
+        doc.text('Final Examination Pass Certificate', w / 2, 222, { align: 'center' });
+
+        doc.setFont('helvetica', 'bold');
+        doc.setTextColor(107, 114, 128);
+        doc.setFontSize(12);
+        doc.text('THIS CERTIFIES THAT', w / 2, 264, { align: 'center' });
+
+        doc.setTextColor(17, 24, 39);
+        doc.setFontSize(28);
+        doc.text(result.name, w / 2, 306, { align: 'center' });
+
+        doc.setFont('helvetica', 'normal');
+        doc.setTextColor(55, 65, 81);
+        doc.setFontSize(15);
+        const text = `has successfully passed the Insurance Personal Lines Final Exam with a score of ${result.percentage}% and met the LAVA passing standard of ${PASSING_SCORE}%. Examination prepared by ${result.trainer}.`;
+        doc.text(text, w / 2, 350, { align: 'center', maxWidth: 560 });
+
+        doc.setFont('helvetica', 'bold');
+        doc.setTextColor(17, 24, 39);
+        doc.setFontSize(13);
+        doc.text(`Certificate No: ${result.certificateNumber}`, 90, 430);
+        doc.text(`Agency: ${result.agency || 'LAVA Training Batch'}`, 90, 456);
+        doc.text(`Date Issued: ${result.date}`, 90, 482);
+        doc.text(`Trainer: ${result.trainer}`, 90, 508);
+        doc.text(`Take Number: ${result.takeNumber}`, w - 250, 430);
+        doc.text(`Overall Score: ${result.percentage}%`, w - 250, 456);
+        doc.text(`Passing Score: ${PASSING_SCORE}%`, w - 250, 482);
+
+        doc.line(120, h - 110, 300, h - 110);
+        doc.line(w - 300, h - 110, w - 120, h - 110);
+        doc.setFontSize(12);
+        doc.text('Training Department', 210, h - 92, { align: 'center' });
+        doc.text('Authorized Signatory', w - 210, h - 92, { align: 'center' });
+
+        doc.save((result.name || 'trainee').replace(/\s+/g, '_') + '_LAVA_Insurance_Personal_Lines_Certificate.pdf');
+      } catch (err) {
+        showMessage('Certificate preview is ready, but PDF library failed to load. You can still use the visible certificate section on the page.');
+        console.error(err);
+      }
+    }
+
+    function openAdminModal() {
+      if (!state.result) return;
+      el.adminPasswordInput.value = '';
+      el.adminError.textContent = '';
+      el.adminError.classList.add('hidden');
+      el.adminModal.classList.remove('hidden');
+      setTimeout(() => el.adminPasswordInput.focus(), 20);
+    }
+
+    function closeAdminModal() {
+      el.adminModal.classList.add('hidden');
+    }
+
+    function unlockAdminReview() {
+      if (el.adminPasswordInput.value !== ADMIN_PASSWORD) {
+        el.adminError.textContent = 'Incorrect admin password.';
+        el.adminError.classList.remove('hidden');
+        return;
+      }
+      state.adminUnlocked = true;
+      closeAdminModal();
+      renderResult();
+      renderCertificate(state.result);
+      updateButtons();
+      showMessage('Admin review unlocked. You can now see the detailed result, correct answers, and certificate.');
+    }
+
+    function escapeHtml(str) {
+      return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+    }
+
+    el.shuffleBtn.addEventListener('click', () => {
+      if (state.started) return;
+      buildExam();
+      showMessage('Questions were shuffled. The displayed numbering now follows proper counting order.');
+      updateAttemptsUI();
+    });
+
+    el.startBtn.addEventListener('click', startExam);
+
+    el.resetBtn.addEventListener('click', () => {
+      resetCurrentForm(false);
+      showMessage('The current form was reset. Your attempt count was not changed.');
+    });
+
+    el.submitBtn.addEventListener('click', () => submitExam(false));
+    el.adminAccessBtn.addEventListener('click', openAdminModal);
+    el.adminUnlockBtn.addEventListener('click', unlockAdminReview);
+    el.adminCancelBtn.addEventListener('click', closeAdminModal);
+    el.adminPasswordInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') unlockAdminReview(); });
+    el.adminModal.addEventListener('click', (e) => { if (e.target === el.adminModal) closeAdminModal(); });
+
+    el.nextTakeBtn.addEventListener('click', () => {
+      resetCurrentForm(true);
+      showMessage('Next take is prepared. Click Start Exam when ready.');
+    });
+
+    el.downloadCertificateBtn.addEventListener('click', () => downloadCertificate(state.result));
+
+    el.placeHomeBtn.addEventListener('click', () => placeCurrentItem('HOME'));
+    el.placeAutoBtn.addEventListener('click', () => placeCurrentItem('AUTO'));
+
+    [el.homeZone, el.autoZone].forEach(zone => {
+      zone.addEventListener('dragover', (e) => {
+        if (!state.started || state.result) return;
+        e.preventDefault();
+      });
+      zone.addEventListener('dragenter', () => zone.classList.add('active'));
+      zone.addEventListener('dragleave', () => zone.classList.remove('active'));
+      zone.addEventListener('drop', (e) => {
+        if (!state.started || state.result) return;
+        e.preventDefault();
+        const target = zone.id === 'homeZone' ? 'HOME' : 'AUTO';
+        placeCurrentItem(target);
+        activateZones(false);
+      });
+    });
+
+    el.candidateName.addEventListener('input', updateAttemptsUI);
+
+    buildExam();
+    updateTimer();
+    updateAttemptsUI();
+    updateButtons();
+  </script>
+</body>
+</html>
