@@ -5,6 +5,10 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>LAVA Insurance Personal Lines Final Exam</title>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700;800&family=UnifrakturCook:wght@700&display=swap" rel="stylesheet">
   <style>
     :root {
       --bg-1: #090909;
@@ -393,66 +397,272 @@
     }
 
     .certificate {
-      background: #ffffff;
-      color: #111827;
-      border-radius: 30px;
-      padding: 18px;
-      border: 8px solid #f59e0b;
+      background: #f0f0f0;
+      color: #111111;
+      border-radius: 10px;
+      padding: 0;
+      border: 1px solid rgba(17,17,17,.18);
       box-shadow: 0 18px 40px rgba(0,0,0,.24);
+      overflow: hidden;
     }
     .certificate-inner {
-      border: 4px solid #e5e7eb;
-      border-radius: 22px;
-      padding: 40px 28px;
+      position: relative;
+      min-height: 740px;
+      padding: 26px 26px 150px;
       text-align: center;
+      background:
+        radial-gradient(circle at 10% 10%, rgba(0,0,0,.04) 0 5px, transparent 5px 22px),
+        radial-gradient(circle at 22% 22%, rgba(0,0,0,.03) 0 5px, transparent 5px 20px),
+        radial-gradient(circle at 88% 18%, rgba(0,0,0,.03) 0 5px, transparent 5px 20px),
+        radial-gradient(circle at 82% 72%, rgba(0,0,0,.03) 0 5px, transparent 5px 21px),
+        linear-gradient(180deg, #f6f6f6 0%, #f1f1f1 100%);
+      overflow: hidden;
     }
-    .cert-logo {
-      width: 92px;
-      height: 92px;
-      object-fit: contain;
-      margin-bottom: 10px;
+    .cert-corner {
+      position: absolute;
+      top: 24px;
+      width: 118px;
+      height: 118px;
+      z-index: 2;
     }
-    .cert-small {
-      font-size: 12px;
-      font-weight: 800;
-      letter-spacing: 3px;
+    .cert-corner.left { left: 18px; }
+    .cert-corner.right { right: 18px; transform: scaleX(-1); }
+    .cert-corner span {
+      position: absolute;
+      display: block;
+      border-color: #7c1d1d;
+      border-style: solid;
+    }
+    .cert-corner span:nth-child(1) { inset: 0 auto auto 0; width: 112px; height: 112px; border-width: 3px 0 0 3px; }
+    .cert-corner span:nth-child(2) { inset: 10px auto auto 10px; width: 96px; height: 96px; border-width: 3px 0 0 3px; }
+    .cert-corner span:nth-child(3) { inset: 20px auto auto 20px; width: 78px; height: 78px; border-width: 3px 0 0 3px; }
+    .cert-watermark {
+      position: absolute;
+      left: 50%;
+      top: 86px;
+      width: min(520px, 60%);
+      transform: translateX(-50%);
+      opacity: .075;
+      z-index: 1;
+      pointer-events: none;
+    }
+    .cert-header,
+    .cert-presented,
+    .cert-name,
+    .cert-name-rule,
+    .cert-body,
+    .cert-meta-row,
+    .cert-signatures,
+    .cert-seal-wrap {
+      position: relative;
+      z-index: 3;
+    }
+    .cert-header {
+      padding-top: 28px;
+    }
+    .cert-title {
+      margin: 0;
+      font-family: 'UnifrakturCook', serif;
+      font-size: clamp(56px, 8vw, 88px);
+      line-height: .95;
+      font-weight: 700;
+      color: #111111;
+      letter-spacing: 1px;
+    }
+    .cert-subtitle {
+      margin: 0;
+      font-family: 'UnifrakturCook', serif;
+      font-size: clamp(28px, 4vw, 50px);
+      line-height: 1;
+      color: #8b1111;
+      letter-spacing: 1px;
+      transform: translateY(-8px);
+    }
+    .cert-presented {
+      margin-top: 44px;
+      font-size: 17px;
+      letter-spacing: 4px;
       text-transform: uppercase;
-      color: #6b7280;
+      color: #7b1d1d;
+      font-family: 'Cinzel', serif;
     }
-    .cert-title { font-size: 40px; font-weight: 900; margin: 14px 0 10px; }
-    .cert-name { font-size: 34px; font-weight: 900; margin: 16px 0; }
+    .cert-name {
+      margin-top: 30px;
+      font-size: clamp(28px, 4vw, 54px);
+      font-weight: 800;
+      font-family: Arial, Helvetica, sans-serif;
+      color: #171717;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+    }
+    .cert-name-rule {
+      width: min(630px, 84%);
+      margin: 12px auto 0;
+      border-top: 2px solid #2e2e2e;
+    }
     .cert-body {
       max-width: 760px;
-      margin: 0 auto;
-      font-size: 18px;
-      line-height: 1.8;
-      color: #374151;
+      margin: 26px auto 0;
+      font-size: 19px;
+      line-height: 1.65;
+      color: #6d1313;
+      font-family: Arial, Helvetica, sans-serif;
     }
-    .cert-grid {
-      display: grid;
-      grid-template-columns: repeat(4, 1fr);
+    .cert-meta-row {
+      display: flex;
+      justify-content: center;
       gap: 12px;
-      margin-top: 24px;
+      flex-wrap: wrap;
+      margin-top: 22px;
     }
-    .cert-mini {
-      background: #f9fafb;
-      border: 1px solid #e5e7eb;
-      border-radius: 18px;
-      padding: 14px;
+    .cert-pill {
+      padding: 10px 14px;
+      border-radius: 999px;
+      background: rgba(255,255,255,.74);
+      border: 1px solid rgba(125,17,17,.15);
+      font-size: 12px;
+      font-weight: 800;
+      letter-spacing: .8px;
+      color: #4b1010;
+      text-transform: uppercase;
+      font-family: 'Cinzel', serif;
     }
-    .cert-mini-label { font-size: 12px; color: #6b7280; }
-    .cert-mini-value { margin-top: 8px; font-size: 20px; font-weight: 800; color: #111827; }
-    .cert-signs {
-      display: grid;
-      grid-template-columns: repeat(2, 1fr);
-      gap: 30px;
-      margin-top: 40px;
-    }
-    .cert-line {
-      border-top: 1px solid #6b7280;
-      padding-top: 8px;
+    .cert-pill span {
+      display: block;
+      margin-top: 4px;
+      font-family: Arial, Helvetica, sans-serif;
       font-size: 14px;
+      color: #111;
+      text-transform: none;
+      letter-spacing: 0;
+    }
+    .cert-signatures {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 40px;
+      align-items: end;
+      margin-top: 70px;
+      padding: 0 80px;
+    }
+    .cert-sign {
+      text-align: center;
+      font-family: 'Cinzel', serif;
+      color: #7b1111;
+    }
+    .cert-sign .line {
+      width: min(100%, 240px);
+      border-top: 2px solid #333;
+      margin: 0 auto 10px;
+    }
+    .cert-sign-name {
+      font-size: 18px;
+      font-weight: 800;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+    }
+    .cert-sign-title {
+      margin-top: 4px;
+      font-size: 13px;
       font-weight: 700;
+      letter-spacing: .5px;
+      text-transform: uppercase;
+    }
+    .cert-seal-wrap {
+      margin-top: 18px;
+      display: grid;
+      place-items: center;
+    }
+    .cert-seal {
+      position: relative;
+      width: 92px;
+      height: 108px;
+      margin: 0 auto;
+    }
+    .cert-seal::before {
+      content: '';
+      position: absolute;
+      left: 50%;
+      top: 0;
+      width: 82px;
+      height: 82px;
+      transform: translateX(-50%);
+      border-radius: 50%;
+      background: radial-gradient(circle at 35% 35%, #ffd35a, #c98b18 70%, #8e4a10 100%);
+      box-shadow: 0 0 0 5px #7b1111, 0 0 0 10px #c5962d;
+    }
+    .cert-seal::after {
+      content: '';
+      position: absolute;
+      left: 50%;
+      bottom: 0;
+      transform: translateX(-50%);
+      width: 0;
+      height: 0;
+      border-left: 16px solid transparent;
+      border-right: 16px solid transparent;
+      border-top: 28px solid #7b1111;
+      filter: drop-shadow(16px 0 0 #8f1515) drop-shadow(-16px 0 0 #8f1515);
+    }
+    .cert-seal img {
+      position: absolute;
+      left: 50%;
+      top: 14px;
+      width: 44px;
+      height: 44px;
+      transform: translateX(-50%);
+      z-index: 2;
+    }
+    .cert-bottom-ribbons {
+      position: absolute;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      height: 210px;
+      pointer-events: none;
+      z-index: 2;
+    }
+    .cert-bottom-ribbons .left-black,
+    .cert-bottom-ribbons .right-black,
+    .cert-bottom-ribbons .left-red,
+    .cert-bottom-ribbons .right-red,
+    .cert-bottom-ribbons .left-darkred,
+    .cert-bottom-ribbons .right-darkred {
+      position: absolute;
+      bottom: 0;
+      width: 42%;
+      height: 180px;
+    }
+    .cert-bottom-ribbons .left-black {
+      left: -4%;
+      background: #141414;
+      clip-path: polygon(0 0, 22% 0, 48% 100%, 0 100%);
+    }
+    .cert-bottom-ribbons .right-black {
+      right: -4%;
+      background: #141414;
+      clip-path: polygon(78% 0, 100% 0, 100% 100%, 52% 100%);
+    }
+    .cert-bottom-ribbons .left-red {
+      left: -2%;
+      background: #7d0f0f;
+      clip-path: polygon(0 16%, 56% 100%, 0 100%);
+    }
+    .cert-bottom-ribbons .right-red {
+      right: -2%;
+      background: #7d0f0f;
+      clip-path: polygon(44% 100%, 100% 16%, 100% 100%);
+    }
+    .cert-bottom-ribbons .left-darkred {
+      left: 12%;
+      background: #bb1d1d;
+      height: 120px;
+      clip-path: polygon(0 0, 100% 100%, 72% 100%, 0 30%);
+    }
+    .cert-bottom-ribbons .right-darkred {
+      right: 12%;
+      background: #bb1d1d;
+      height: 120px;
+      clip-path: polygon(0 100%, 100% 0, 100% 30%, 28% 100%);
     }
 
     .modal-backdrop {
@@ -610,28 +820,52 @@
 
     <section id="certificateCard" class="certificate hidden">
       <div class="certificate-inner">
-        <img id="logoCert" class="cert-logo" alt="LAVA Logo" />
-        <div class="cert-small">Certificate of Completion</div>
-        <div class="cert-title">Insurance Personal Lines</div>
-        <div style="font-size: 22px; color: #4b5563; margin-bottom: 24px;">Final Examination Pass Certificate</div>
-        <div class="cert-small">This certifies that</div>
+        <div class="cert-corner left"><span></span><span></span><span></span></div>
+        <div class="cert-corner right"><span></span><span></span><span></span></div>
+        <img id="logoCertWatermark" class="cert-watermark" alt="LAVA Watermark" />
+
+        <div class="cert-header">
+          <h2 class="cert-title">Certificate</h2>
+          <div class="cert-subtitle">of Recognition</div>
+        </div>
+
+        <div class="cert-presented">This Certificate Is Presented To</div>
         <div id="certName" class="cert-name">Trainee Name</div>
+        <div class="cert-name-rule"></div>
         <p id="certBody" class="cert-body"></p>
-        <div class="cert-grid">
-          <div class="cert-mini"><div class="cert-mini-label">Trainee</div><div id="certMiniName" class="cert-mini-value"></div></div>
-          <div class="cert-mini"><div class="cert-mini-label">Agency</div><div id="certMiniAgency" class="cert-mini-value"></div></div>
-          <div class="cert-mini"><div class="cert-mini-label">Trainer</div><div id="certMiniTrainer" class="cert-mini-value"></div></div>
-          <div class="cert-mini"><div class="cert-mini-label">Date Issued</div><div id="certMiniDate" class="cert-mini-value"></div></div>
+
+        <div class="cert-meta-row">
+          <div class="cert-pill">Certificate No.<span id="certMetaNo"></span></div>
+          <div class="cert-pill">Score<span id="certMetaScore"></span></div>
+          <div class="cert-pill">Agency<span id="certMetaAgency"></span></div>
+          <div class="cert-pill">Date Issued<span id="certMetaDate"></span></div>
+          <div class="cert-pill">Take Number<span id="certMetaTake"></span></div>
         </div>
-        <div class="cert-grid" style="margin-top: 12px">
-          <div class="cert-mini"><div class="cert-mini-label">Certificate No.</div><div id="certMiniNo" class="cert-mini-value"></div></div>
-          <div class="cert-mini"><div class="cert-mini-label">Score</div><div id="certMiniScore" class="cert-mini-value"></div></div>
-          <div class="cert-mini"><div class="cert-mini-label">Take Number</div><div id="certMiniTake" class="cert-mini-value"></div></div>
-          <div class="cert-mini"><div class="cert-mini-label">Prepared By</div><div id="certMiniPrepared" class="cert-mini-value"></div></div>
+
+        <div class="cert-signatures">
+          <div class="cert-sign">
+            <div class="line"></div>
+            <div id="certTrainerSignName" class="cert-sign-name">Trainer Name</div>
+            <div id="certTrainerSignTitle" class="cert-sign-title">Insurance Training Director</div>
+          </div>
+          <div class="cert-sign">
+            <div class="line"></div>
+            <div id="certManagerSignName" class="cert-sign-name">Jonas Rosauro</div>
+            <div id="certManagerSignTitle" class="cert-sign-title">Insurance Training Manager</div>
+          </div>
         </div>
-        <div class="cert-signs">
-          <div class="cert-line">Training Department</div>
-          <div class="cert-line">Authorized Signatory</div>
+
+        <div class="cert-seal-wrap">
+          <div class="cert-seal"><img id="logoCertSeal" alt="LAVA Seal" /></div>
+        </div>
+
+        <div class="cert-bottom-ribbons">
+          <div class="left-black"></div>
+          <div class="right-black"></div>
+          <div class="left-red"></div>
+          <div class="right-red"></div>
+          <div class="left-darkred"></div>
+          <div class="right-darkred"></div>
         </div>
       </div>
     </section>
@@ -678,8 +912,10 @@
   <script>
     const LOGO_B64 = 'iVBORw0KGgoAAAANSUhEUgAAAOEAAADhCAMAAAAJbSJIAAAAnFBMVEXnODXx8fHnMS7y9/by9PHx+Pfx9PTnNTTnMTDz9vfv8vHmKyfrhoLnNTLx5+fpcW/nSkfpa2vqd3Xtqqjuvb3rgn/pcnDv2NjmLSrtpqXpenrpaGfv0tLoZ2Hx7/HmTUrrjIvmPDrvy8vmVlDmWVnmPzvsn57mJibjAADw19foY2PvzMznQj/yyMjrj4/nRUPuubngAAD0zs7vb2/w3Nzrhn7oY13uubrnODbcAADrj4/vtLTkAADrjY3uurrtqajnNS3nODfRO+qkAAAFlElEQVR4nO2di3aiMBCGk+YmmLS0xr7/t2xDlAQMULNqvzm/S9JKIoaZ3pkbQAL4cDgcDofD4XA4HA6Hw+FwuP8r9SAhs8QYw5X6X7KaP0CV2r2+HiCRLw9VGF7mqWp6NRvSEI2NwOvcxBMaN1b2SVjbRkBiv9a1x4fs+O1YSwmhMTkhFH99t02R2Ij+Qnk6GH0quEaJQqvx4XXj8gSfKz6kBRD7kQexceNTSqbR0Rs0XFn1sfEJYEIMZEXpJsa30+eKEy3q3CGm5wziVbb+YF7kS62xv9CNvC44x+jrA1bNQHav71pSAhIix0JjA7wnJaQMWrQWcTu4J0W0wltCrLNsGHVM6vUSsnbjAXkhN8F/hCxzwW5wexT2ZLzzIhYd+OC2m8H5V2VH1lDLOtRu0KYHm3M0grjBmxqHyR0ErIv0uXqcOH0aJFPkF+CZ2uKU2uJdNqWzF0WlVPG+DgG6Zh4ka+qzSXg4D+wbBSmk3J+gfYKd7y7AJDq2ehNybXlA49uNpBvupP+D/ITttmkvv2Lh0zcB+7ODiEjYrVM9Dy9LCi/ywM3lfBjlwmxkfTmWW9AVsK+Q/tDmSXU0XHYowB7CE5UQYqfup9rGCfCnZVVzkl4D5Q3T4VjDNQXz6XjBXQDxWsVyibRp2H7LuYt+sDG3bh2k3T7mSBWxVuyZnWheMI1O0Dg5h6GibK1sBGRf1ScCbuQ9r1g0MdVqHHv9aRUQBuDkzdkpFAz0ppTivYyQprwXkeAYu1of37R6WcOfXk76gFjN0aMJKMKn7q/auyH3h0hO+qj+s/LWQ53OQYtaac+4e4C+Lb5sZ8YJfhz1WUm2BWMh55NLF0tb3Ujv2Bxbph1UXhF4hfJt7oTvNK8EMZqPjH+qJ1WnqI+ZW5jXUd5cfk11p7Lh0F8UFt5ve+OXV9mGcIG7dC16lQxrjH6Zd7k3pvP9A7jKZcw7Wm0t2p90uSOM1Ku0Lr1lrrt2lYWrP1NoTjiPq9I+X2+muGJp9gUtD+rmdtQuveCwVmr4n9n1v6dDZGi3FZSeL1yF1/jNOm0YtR4O6bRZ1P3w4HA6Hw+FwOBwOh8PhcDgczsP8BR8rxm5FxqR7AAAAAElFTkSuQmCC';
     const LOGO_SRC = 'data:image/png;base64,' + LOGO_B64;
-    document.getElementById('logoExam').src = LOGO_SRC;
-    document.getElementById('logoCert').src = LOGO_SRC;
+    ['logoExam', 'logoCertWatermark', 'logoCertSeal'].forEach((id) => {
+      const node = document.getElementById(id);
+      if (node) node.src = LOGO_SRC;
+    });
     const favicon = document.createElement('link');
     favicon.rel = 'icon';
     favicon.href = LOGO_SRC;
@@ -689,6 +925,19 @@
     const EXAM_DURATION = 30 * 60;
     const MAX_TAKES = 3;
     const ADMIN_PASSWORD = 'LAVAADMIN123'; // Change this password for admin-only review
+    const CERTIFICATE_MANAGER_NAME = 'Jonas Rosauro';
+    const CERTIFICATE_MANAGER_TITLE = 'Insurance Training Manager';
+    const CERTIFICATE_TRAINER_TITLE = 'Insurance Training Director';
+
+    // Optional rich HTML email configuration.
+    // If left blank, the site falls back to your current Netlify form notification workflow.
+    // To use rich branded emails, create an EmailJS account and fill in these values.
+    const EMAILJS_CONFIG = {
+      enabled: false,
+      publicKey: '',
+      serviceId: '',
+      templateId: ''
+    };
 
     const OBJECTIVE_QUESTIONS = [
       { id: 1, question: 'What is the main purpose of insurance?', answer: 'To transfer risk from an individual to an insurance company', type: 'mcq' },
@@ -825,14 +1074,15 @@
       certificateCard: document.getElementById('certificateCard'),
       certName: document.getElementById('certName'),
       certBody: document.getElementById('certBody'),
-      certMiniName: document.getElementById('certMiniName'),
-      certMiniAgency: document.getElementById('certMiniAgency'),
-      certMiniTrainer: document.getElementById('certMiniTrainer'),
-      certMiniDate: document.getElementById('certMiniDate'),
-      certMiniNo: document.getElementById('certMiniNo'),
-      certMiniScore: document.getElementById('certMiniScore'),
-      certMiniTake: document.getElementById('certMiniTake'),
-      certMiniPrepared: document.getElementById('certMiniPrepared')
+      certMetaNo: document.getElementById('certMetaNo'),
+      certMetaScore: document.getElementById('certMetaScore'),
+      certMetaAgency: document.getElementById('certMetaAgency'),
+      certMetaDate: document.getElementById('certMetaDate'),
+      certMetaTake: document.getElementById('certMetaTake'),
+      certTrainerSignName: document.getElementById('certTrainerSignName'),
+      certTrainerSignTitle: document.getElementById('certTrainerSignTitle'),
+      certManagerSignName: document.getElementById('certManagerSignName'),
+      certManagerSignTitle: document.getElementById('certManagerSignTitle')
     };
 
     const state = {
@@ -1071,15 +1321,16 @@
         return;
       }
       el.certName.textContent = r.name;
-      el.certBody.innerHTML = `has successfully passed the Insurance Personal Lines Final Exam with a score of <strong style="color:#16a34a">${r.percentage}%</strong>. This examination was prepared by <strong>${escapeHtml(r.trainer)}</strong>.`;
-      el.certMiniName.textContent = r.name;
-      el.certMiniAgency.textContent = r.agency || 'LAVA Training Batch';
-      el.certMiniTrainer.textContent = r.trainer;
-      el.certMiniDate.textContent = r.date;
-      el.certMiniNo.textContent = r.certificateNumber;
-      el.certMiniScore.textContent = r.percentage + '%';
-      el.certMiniTake.textContent = String(r.takeNumber);
-      el.certMiniPrepared.textContent = r.trainer;
+      el.certBody.innerHTML = `for successfully passing the <strong>Insurance Personal Lines Final Examination</strong> and demonstrating proficiency in LAVA insurance training with an overall score of <strong>${r.percentage}%</strong>.`;
+      el.certMetaNo.textContent = r.certificateNumber;
+      el.certMetaScore.textContent = r.percentage + '%';
+      el.certMetaAgency.textContent = r.agency || 'LAVA Training Batch';
+      el.certMetaDate.textContent = r.date;
+      el.certMetaTake.textContent = String(r.takeNumber);
+      el.certTrainerSignName.textContent = r.trainer;
+      el.certTrainerSignTitle.textContent = CERTIFICATE_TRAINER_TITLE;
+      el.certManagerSignName.textContent = CERTIFICATE_MANAGER_NAME;
+      el.certManagerSignTitle.textContent = CERTIFICATE_MANAGER_TITLE;
       el.certificateCard.classList.remove('hidden');
     }
 
@@ -1099,7 +1350,90 @@
       }
     }
 
+    function buildRichEmailHtml(result, wasAutoSubmitted) {
+      const statusText = result.passed ? 'PASSED' : 'FAILED';
+      const statusColor = result.passed ? '#0f9d58' : '#c62828';
+      return `
+      <div style="margin:0;padding:0;background:#111111;font-family:Arial,Helvetica,sans-serif;">
+        <div style="max-width:720px;margin:0 auto;background:#f7f7f7;border:1px solid #dedede;overflow:hidden;">
+          <div style="background:linear-gradient(135deg,#140909 0%,#470b10 65%,#7b1111 100%);padding:28px 24px;color:#ffffff;text-align:center;">
+            <img src="${LOGO_SRC}" alt="LAVA" style="width:78px;height:78px;object-fit:contain;display:block;margin:0 auto 14px;" />
+            <div style="font-size:14px;letter-spacing:3px;text-transform:uppercase;opacity:.9;">LAVA Exam Notification</div>
+            <h1 style="margin:12px 0 6px;font-size:34px;line-height:1.1;">Insurance Personal Lines Exam Result</h1>
+            <div style="display:inline-block;margin-top:10px;padding:10px 16px;border-radius:999px;background:${statusColor};font-weight:800;letter-spacing:1px;">${statusText} · ${result.percentage}%</div>
+          </div>
+
+          <div style="padding:24px;">
+            <div style="background:#ffffff;border:1px solid #ececec;border-radius:18px;padding:18px 18px 12px;margin-bottom:18px;">
+              <div style="font-size:12px;letter-spacing:2px;text-transform:uppercase;color:#7b1111;font-weight:800;margin-bottom:12px;">Submission Summary</div>
+              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border-collapse:collapse;">
+                <tr><td style="padding:8px 0;color:#666;font-weight:700;">Candidate</td><td style="padding:8px 0;color:#111;font-weight:800;text-align:right;">${escapeHtml(result.name)}</td></tr>
+                <tr><td style="padding:8px 0;color:#666;font-weight:700;">Agency</td><td style="padding:8px 0;color:#111;font-weight:800;text-align:right;">${escapeHtml(result.agency || 'LAVA Training Batch')}</td></tr>
+                <tr><td style="padding:8px 0;color:#666;font-weight:700;">Trainer</td><td style="padding:8px 0;color:#111;font-weight:800;text-align:right;">${escapeHtml(result.trainer)}</td></tr>
+                <tr><td style="padding:8px 0;color:#666;font-weight:700;">Take Number</td><td style="padding:8px 0;color:#111;font-weight:800;text-align:right;">${result.takeNumber}</td></tr>
+                <tr><td style="padding:8px 0;color:#666;font-weight:700;">Objective Score</td><td style="padding:8px 0;color:#111;font-weight:800;text-align:right;">${result.objectiveCorrect}/70</td></tr>
+                <tr><td style="padding:8px 0;color:#666;font-weight:700;">Drag Score</td><td style="padding:8px 0;color:#111;font-weight:800;text-align:right;">${result.dragCorrect}/20</td></tr>
+                <tr><td style="padding:8px 0;color:#666;font-weight:700;">Certificate No.</td><td style="padding:8px 0;color:#111;font-weight:800;text-align:right;">${result.certificateNumber}</td></tr>
+                <tr><td style="padding:8px 0;color:#666;font-weight:700;">Submitted</td><td style="padding:8px 0;color:#111;font-weight:800;text-align:right;">${new Date().toLocaleString()}</td></tr>
+                <tr><td style="padding:8px 0;color:#666;font-weight:700;">Auto Submitted</td><td style="padding:8px 0;color:#111;font-weight:800;text-align:right;">${wasAutoSubmitted ? 'Yes' : 'No'}</td></tr>
+              </table>
+            </div>
+
+            <div style="background:#f1f1f1;border:1px solid #dddddd;border-radius:8px;padding:20px;position:relative;overflow:hidden;">
+              <div style="position:absolute;left:50%;top:42px;transform:translateX(-50%);opacity:.06;"><img src="${LOGO_SRC}" alt="" style="width:260px;height:260px;object-fit:contain;" /></div>
+              <div style="position:relative;text-align:center;">
+                <div style="font-family:Georgia,serif;font-size:42px;font-weight:800;color:#111;line-height:1;">Certificate</div>
+                <div style="font-family:Georgia,serif;font-size:24px;font-weight:800;color:#8b1111;line-height:1.1;margin-top:4px;">of Recognition</div>
+                <div style="margin-top:26px;font-size:12px;letter-spacing:3px;text-transform:uppercase;color:#7b1d1d;font-weight:800;">Presented To</div>
+                <div style="margin-top:16px;font-size:28px;font-weight:900;color:#1a1a1a;text-transform:uppercase;">${escapeHtml(result.name)}</div>
+                <div style="width:80%;margin:10px auto 0;border-top:2px solid #2f2f2f;"></div>
+                <p style="max-width:560px;margin:18px auto 0;color:#6d1313;font-size:16px;line-height:1.6;">for successfully passing the Insurance Personal Lines Final Examination and demonstrating proficiency in LAVA insurance training with a score of <strong>${result.percentage}%</strong>.</p>
+              </div>
+            </div>
+
+            <div style="margin-top:18px;padding:16px 18px;border-radius:16px;background:#fff7ed;border:1px solid #fed7aa;color:#7c2d12;font-size:14px;line-height:1.6;">
+              <strong>Note:</strong> Email clients have limited support for real animation, so this version uses a rich branded HTML layout instead of heavy animation. If you want, a GIF banner can also be added later.
+            </div>
+          </div>
+        </div>
+      </div>`;
+    }
+
+    async function sendViaEmailJS(result, wasAutoSubmitted) {
+      if (!EMAILJS_CONFIG.enabled || !EMAILJS_CONFIG.publicKey || !EMAILJS_CONFIG.serviceId || !EMAILJS_CONFIG.templateId || !window.emailjs) {
+        return { ok: false, reason: 'emailjs-not-configured' };
+      }
+      try {
+        emailjs.init({ publicKey: EMAILJS_CONFIG.publicKey });
+        const recipients = ['leo@lavaautomation.com', 'jonas@lavaautomation.com'];
+        const baseParams = {
+          email_subject: `LAVA Exam Result - ${result.name} - ${result.percentage}%`,
+          candidate_name: result.name,
+          agency: result.agency || 'LAVA Training Batch',
+          trainer_name: result.trainer,
+          score: String(result.percentage),
+          passed: result.passed ? 'Passed' : 'Failed',
+          objective_correct: `${result.objectiveCorrect}/70`,
+          drag_correct: `${result.dragCorrect}/20`,
+          take_number: String(result.takeNumber),
+          certificate_number: result.certificateNumber,
+          submitted_at: new Date().toLocaleString(),
+          rich_html: buildRichEmailHtml(result, wasAutoSubmitted)
+        };
+        for (const recipient of recipients) {
+          await emailjs.send(EMAILJS_CONFIG.serviceId, EMAILJS_CONFIG.templateId, { ...baseParams, to_email: recipient });
+        }
+        return { ok: true, mode: 'emailjs' };
+      } catch (error) {
+        console.error('EmailJS error:', error);
+        return { ok: false, reason: 'emailjs-failed' };
+      }
+    }
+
     async function sendResultSubmission(result, wasAutoSubmitted) {
+      const emailJsResult = await sendViaEmailJS(result, wasAutoSubmitted);
+      if (emailJsResult.ok) return emailJsResult;
+
       const form = document.getElementById('netlifyExamForm');
       if (!form) return { ok: false, reason: 'missing-form' };
 
@@ -1115,8 +1449,10 @@
         `Drag Score: ${result.dragCorrect}/20`,
         `Certificate No: ${result.certificateNumber}`,
         `Auto Submitted: ${wasAutoSubmitted ? 'Yes' : 'No'}`,
-        `Submitted At: ${new Date().toLocaleString()}`
-      ].join(' | ');
+        `Submitted At: ${new Date().toLocaleString()}`,
+        '',
+        'Rich HTML email mode is available if EmailJS is configured in the HTML file.'
+      ].join('\n');
 
       form.querySelector('[name="subject"]').value = `LAVA Exam Result - ${result.name} - ${result.percentage}%`;
       form.querySelector('[name="candidate_name"]').value = result.name;
@@ -1140,7 +1476,7 @@
           body: new URLSearchParams(formData).toString()
         });
         if (!response.ok) throw new Error('Submission failed');
-        return { ok: true };
+        return { ok: true, mode: 'netlify' };
       } catch (error) {
         console.error('Netlify form submission error:', error);
         return { ok: false, reason: 'network' };
@@ -1312,8 +1648,10 @@
       const remaining = Math.max(0, MAX_TAKES - attempts);
       const emailResult = await sendResultSubmission(state.result, isAuto);
       const emailNote = emailResult.ok
-        ? ' A copy of the score was sent through the site notification workflow.'
-        : ' Email delivery will work after this file is deployed on Netlify with form detection and email notifications enabled.';
+        ? (emailResult.mode === 'emailjs'
+            ? ' A rich branded HTML email was sent to the admin inboxes.'
+            : ' A copy of the score was sent through the Netlify notification workflow. For richer email styling, enable EmailJS in the HTML file.')
+        : ' Email delivery will work after this file is deployed on Netlify with form detection and email notifications enabled, or after EmailJS is configured for rich HTML emails.';
       showMessage((isAuto ? 'Time is up. The exam was auto-submitted.\n' : '') + `Exam submitted successfully. Admin password is required to view the result, correct answers, and certificate. Remaining take(s): ${remaining}.` + emailNote);
     }
 
@@ -1324,62 +1662,106 @@
         const doc = new jsPDF({ orientation: 'landscape', unit: 'pt', format: 'a4' });
         const w = doc.internal.pageSize.getWidth();
         const h = doc.internal.pageSize.getHeight();
+        const center = w / 2;
 
-        doc.setFillColor(255, 247, 237);
-        doc.rect(18, 18, w - 36, h - 36, 'F');
-        doc.setDrawColor(245, 158, 11);
-        doc.setLineWidth(6);
-        doc.rect(24, 24, w - 48, h - 48);
-        doc.setDrawColor(75, 85, 99);
-        doc.setLineWidth(1.5);
-        doc.rect(42, 42, w - 84, h - 84);
+        doc.setFillColor(242, 242, 242);
+        doc.rect(0, 0, w, h, 'F');
 
-        doc.addImage(LOGO_SRC, 'PNG', (w / 2) - 36, 48, 72, 72);
-        doc.setFont('helvetica', 'bold');
-        doc.setTextColor(107, 114, 128);
-        doc.setFontSize(13);
-        doc.text('CERTIFICATE OF COMPLETION', w / 2, 144, { align: 'center' });
+        // subtle watermark
+        if (doc.GState && doc.setGState) {
+          doc.setGState(new doc.GState({ opacity: 0.06 }));
+          doc.addImage(LOGO_SRC, 'PNG', center - 120, 90, 240, 240);
+          doc.setGState(new doc.GState({ opacity: 1 }));
+        } else {
+          doc.addImage(LOGO_SRC, 'PNG', center - 120, 90, 240, 240);
+        }
 
-        doc.setTextColor(17, 24, 39);
-        doc.setFontSize(30);
-        doc.text('Insurance Personal Lines', w / 2, 192, { align: 'center' });
+        // decorative corners
+        const drawCorner = (x, flip = 1) => {
+          const mul = flip;
+          doc.setDrawColor(122, 25, 25);
+          doc.setLineWidth(2);
+          doc.line(x, 28, x + 80 * mul, 28);
+          doc.line(x, 28, x, 78);
+          doc.line(x + 10 * mul, 36, x + 70 * mul, 36);
+          doc.line(x + 10 * mul, 36, x + 10 * mul, 70);
+          doc.line(x + 20 * mul, 44, x + 54 * mul, 44);
+          doc.line(x + 20 * mul, 44, x + 20 * mul, 62);
+        };
+        drawCorner(28, 1);
+        drawCorner(w - 28, -1);
 
-        doc.setFont('helvetica', 'normal');
-        doc.setTextColor(75, 85, 99);
-        doc.setFontSize(17);
-        doc.text('Final Examination Pass Certificate', w / 2, 222, { align: 'center' });
-
-        doc.setFont('helvetica', 'bold');
-        doc.setTextColor(107, 114, 128);
-        doc.setFontSize(12);
-        doc.text('THIS CERTIFIES THAT', w / 2, 264, { align: 'center' });
-
-        doc.setTextColor(17, 24, 39);
+        // title
+        doc.setFont('times', 'bold');
+        doc.setTextColor(17, 17, 17);
+        doc.setFontSize(48);
+        doc.text('Certificate', center, 90, { align: 'center' });
+        doc.setTextColor(139, 17, 17);
         doc.setFontSize(28);
-        doc.text(result.name, w / 2, 306, { align: 'center' });
+        doc.text('of Recognition', center, 120, { align: 'center' });
 
-        doc.setFont('helvetica', 'normal');
-        doc.setTextColor(55, 65, 81);
-        doc.setFontSize(15);
-        const text = `has successfully passed the Insurance Personal Lines Final Exam with a score of ${result.percentage}% and met the LAVA passing standard of ${PASSING_SCORE}%. Examination prepared by ${result.trainer}.`;
-        doc.text(text, w / 2, 350, { align: 'center', maxWidth: 560 });
-
+        doc.setTextColor(123, 29, 29);
         doc.setFont('helvetica', 'bold');
-        doc.setTextColor(17, 24, 39);
         doc.setFontSize(13);
-        doc.text(`Certificate No: ${result.certificateNumber}`, 90, 430);
-        doc.text(`Agency: ${result.agency || 'LAVA Training Batch'}`, 90, 456);
-        doc.text(`Date Issued: ${result.date}`, 90, 482);
-        doc.text(`Trainer: ${result.trainer}`, 90, 508);
-        doc.text(`Take Number: ${result.takeNumber}`, w - 250, 430);
-        doc.text(`Overall Score: ${result.percentage}%`, w - 250, 456);
-        doc.text(`Passing Score: ${PASSING_SCORE}%`, w - 250, 482);
+        doc.text('THIS CERTIFICATE IS PRESENTED TO', center, 176, { align: 'center' });
 
-        doc.line(120, h - 110, 300, h - 110);
-        doc.line(w - 300, h - 110, w - 120, h - 110);
+        doc.setTextColor(24, 24, 24);
+        doc.setFontSize(28);
+        doc.text((result.name || '').toUpperCase(), center, 224, { align: 'center' });
+        doc.setDrawColor(43, 43, 43);
+        doc.setLineWidth(1.5);
+        doc.line(135, 236, w - 135, 236);
+
+        doc.setTextColor(109, 19, 19);
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(16);
+        const body = 'for successfully passing the Insurance Personal Lines Final Examination and demonstrating proficiency in LAVA insurance training.';
+        doc.text(body, center, 272, { align: 'center', maxWidth: 580 });
+
+        // meta line
+        doc.setFont('helvetica', 'bold');
+        doc.setTextColor(17, 17, 17);
         doc.setFontSize(12);
-        doc.text('Training Department', 210, h - 92, { align: 'center' });
-        doc.text('Authorized Signatory', w - 210, h - 92, { align: 'center' });
+        doc.text(`Score: ${result.percentage}%`, 118, 338);
+        doc.text(`Agency: ${result.agency || 'LAVA Training Batch'}`, 118, 360);
+        doc.text(`Certificate No: ${result.certificateNumber}`, 118, 382);
+        doc.text(`Date Issued: ${result.date}`, w - 255, 338);
+        doc.text(`Take Number: ${result.takeNumber}`, w - 255, 360);
+        doc.text(`Trainer: ${result.trainer}`, w - 255, 382);
+
+        // signatures
+        doc.setDrawColor(43, 43, 43);
+        doc.line(120, 462, 300, 462);
+        doc.line(w - 300, 462, w - 120, 462);
+        doc.setTextColor(123, 17, 17);
+        doc.setFont('times', 'bold');
+        doc.setFontSize(16);
+        doc.text(result.trainer.toUpperCase(), 210, 480, { align: 'center' });
+        doc.text(CERTIFICATE_MANAGER_NAME.toUpperCase(), w - 210, 480, { align: 'center' });
+        doc.setFontSize(11);
+        doc.text(CERTIFICATE_TRAINER_TITLE.toUpperCase(), 210, 498, { align: 'center' });
+        doc.text(CERTIFICATE_MANAGER_TITLE.toUpperCase(), w - 210, 498, { align: 'center' });
+
+        // seal
+        doc.setFillColor(125, 17, 17);
+        doc.circle(center, 514, 28, 'F');
+        doc.setFillColor(210, 155, 48);
+        doc.circle(center, 514, 21, 'F');
+        doc.addImage(LOGO_SRC, 'PNG', center - 14, 500, 28, 28);
+        doc.setFillColor(125, 17, 17);
+        doc.triangle(center - 12, 535, center, 566, center - 24, 552, 'F');
+        doc.triangle(center + 12, 535, center + 24, 552, center, 566, 'F');
+
+        // bottom ribbons
+        doc.setFillColor(20, 20, 20);
+        doc.triangle(0, 345, 0, h, 165, h, 'F');
+        doc.triangle(w, 345, w - 165, h, w, h, 'F');
+        doc.setFillColor(122, 15, 15);
+        doc.triangle(0, 445, 0, h, 255, h, 'F');
+        doc.triangle(w, 445, w - 255, h, w, h, 'F');
+        doc.setFillColor(187, 29, 29);
+        doc.triangle(0, 410, 270, h, 220, h, 'F');
+        doc.triangle(w, 410, w - 270, h, w - 220, h, 'F');
 
         doc.save((result.name || 'trainee').replace(/\s+/g, '_') + '_LAVA_Insurance_Personal_Lines_Certificate.pdf');
       } catch (err) {
