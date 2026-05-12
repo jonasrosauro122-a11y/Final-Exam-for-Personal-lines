@@ -191,7 +191,8 @@
       <input type="hidden" name="result_summary" />
       <input type="hidden" name="recipient_1" value="leo@lavaautomation.com" />
       <input type="hidden" name="recipient_2" value="jonas@lavaautomation.com" />
-      <input type="hidden" name="email" value="leo@lavaautomation.com" />
+      <input type="hidden" name="recipient_3" value="au@lavaautomation.com" />
+      <input type="hidden" name="recipient_4" value="alchanie@lavaautomation.com" />
     </form>
 
     <div id="adminModal" class="modal-backdrop hidden">
@@ -271,7 +272,7 @@
           take_number: String(result.takeNumber),
           certificate_number: result.certificateNumber,
           submitted_at: new Date().toLocaleString(),
-          to_email: 'leo@lavaautomation.com, jonas@lavaautomation.com'
+          to_email: 'leo@lavaautomation.com, jonas@lavaautomation.com, au@lavaautomation.com, alchanie@lavaautomation.com'
         };
         await emailjs.send(EMAILJS_CONFIG.serviceId, EMAILJS_CONFIG.templateId, params);
         return {ok:true, mode:'emailjs'};
